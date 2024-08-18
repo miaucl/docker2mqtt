@@ -8,6 +8,7 @@ on:
 
 jobs:
   check_version:
+    name: Check version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,7 +21,7 @@ jobs:
       - name: Extract version from file
         id: extract_version
         run: |
-          VERSION=$(grep '__version__' /docker2mqtt | sed -E 's/__version__ = "(.*)"/\1/')
+          VERSION=$(grep '__version__' ./docker2mqtt | sed -E 's/__version__ = "(.*)"/\1/')
           echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Compare versions
