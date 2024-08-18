@@ -16,7 +16,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -108,7 +108,7 @@ def device_definition(container_entry):
     """
     return {
         'identifiers': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{container_entry['name']}',
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']}",
+        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()}",
     }
 
 def register_container(container_entry):
@@ -120,7 +120,7 @@ def register_container(container_entry):
 
     registration_topic = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events"))
     registration_packet = {
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']} Events",
+        'name': f"{container_entry['name']} Events",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -141,7 +141,7 @@ def register_container(container_entry):
 
     registration_topic_cpu = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats"))
     registration_packet_cpu = {
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']} CPU Stats",
+        'name': f"{container_entry['name']} CPU Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_cpu}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -158,7 +158,7 @@ def register_container(container_entry):
 
     registration_topic_memory = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats"))
     registration_packet_memory = {
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']} Memory Stats",
+        'name': f"{container_entry['name']} Memory Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_memory}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -178,7 +178,7 @@ def register_container(container_entry):
 
     registration_topic_netin = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats"))
     registration_packet_netin = {
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']} Network IN Stats",
+        'name': f"{container_entry['name']} Network IN Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netin}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -198,7 +198,7 @@ def register_container(container_entry):
 
     registration_topic_netout = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats"))
     registration_packet_netout = {
-        'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']} Network OUT Stats",
+        'name': f"{container_entry['name']} Network OUT Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netout}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
