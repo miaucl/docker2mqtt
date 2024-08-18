@@ -67,7 +67,7 @@ jobs:
 
   release:
     name: Tag/Release
-    needs: check_version
+    needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
