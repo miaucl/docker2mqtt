@@ -16,7 +16,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
