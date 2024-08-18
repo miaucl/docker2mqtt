@@ -16,7 +16,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -31,7 +31,8 @@ MQTT_PORT = int(environ.get('MQTT_PORT', '1883'))
 MQTT_TIMEOUT = int(environ.get('MQTT_TIMEOUT', '30'))
 MQTT_TOPIC_PREFIX = environ.get('MQTT_TOPIC_PREFIX', 'docker')
 MQTT_QOS = int(environ.get('MQTT_QOS', 1))
-DISCOVERY_TOPIC = f'{HOMEASSISTANT_PREFIX}/binary_sensor/{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}_{{}}/config'
+DISCOVERY_TOPIC_BINARY_SENSOR = f'{HOMEASSISTANT_PREFIX}/binary_sensor/{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}_{{}}/config'
+DISCOVERY_TOPIC_SENSOR = f'{HOMEASSISTANT_PREFIX}/sensor/{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}_{{}}/config'
 WATCHED_EVENTS = ('create', 'destroy', 'die', 'pause', 'rename', 'start', 'stop', 'unpause')
 STATS = environ.get('STATS','0')
 STATSRECORDSECONDS = environ.get('STATS_RECORD_SECONDS',30)
@@ -118,7 +119,7 @@ def register_container(container_entry):
 
     # Events
 
-    registration_topic = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events"))
+    registration_topic = DISCOVERY_TOPIC_BINARY_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events"))
     registration_packet = {
         'name': f"{container_entry['name']} Events",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic}',
@@ -139,7 +140,7 @@ def register_container(container_entry):
 
     # Stats
 
-    registration_topic_cpu = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats"))
+    registration_topic_cpu = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats"))
     registration_packet_cpu = {
         'name': f"{container_entry['name']} CPU Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_cpu}',
@@ -156,7 +157,7 @@ def register_container(container_entry):
     }
     mqtt_send(registration_topic_cpu, json.dumps(registration_packet_cpu), retain=True)
 
-    registration_topic_memory = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats"))
+    registration_topic_memory = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats"))
     registration_packet_memory = {
         'name': f"{container_entry['name']} Memory Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_memory}',
@@ -176,7 +177,7 @@ def register_container(container_entry):
     }
     mqtt_send(registration_topic_memory, json.dumps(registration_packet_memory), retain=True)
 
-    registration_topic_netin = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats"))
+    registration_topic_netin = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats"))
     registration_packet_netin = {
         'name': f"{container_entry['name']} Network IN Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netin}',
@@ -196,7 +197,7 @@ def register_container(container_entry):
     }
     mqtt_send(registration_topic_netin, json.dumps(registration_packet_netin), retain=True)
 
-    registration_topic_netout = DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats"))
+    registration_topic_netout = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats"))
     registration_packet_netout = {
         'name': f"{container_entry['name']} Network OUT Stats",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netout}',
@@ -227,15 +228,15 @@ def unregister_container(container_entry):
 
     # Events
 
-    mqtt_send(DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_BINARY_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events")), '', retain=True)
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/events', '', retain=True)
 
     # Stats
 
-    mqtt_send(DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats")), '', retain=True)
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', '', retain=True)
 
 def stat_to_value(stat, container, matches):
