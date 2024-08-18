@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -172,7 +172,6 @@ def register_container(container_entry):
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'running',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_cpu, json.dumps(registration_packet_cpu), retain=True)
@@ -190,7 +189,7 @@ def register_container(container_entry):
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'running',
+        'device_class': 'data_size',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'json_attributes_template': '{{ { "memorylimit": value_json.memorylimit, "memory": value_json.memory } }}',
         'qos': MQTT_QOS,
@@ -210,7 +209,7 @@ def register_container(container_entry):
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'running',
+        'device_class': 'data_rate',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'json_attributes_template': '{{ { "blockinput": value_json.blockinput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
@@ -230,7 +229,7 @@ def register_container(container_entry):
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'running',
+        'device_class': 'data_rate',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'json_attributes_template': '{{ { "blockoutput": value_json.blockoutput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
