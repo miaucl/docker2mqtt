@@ -57,14 +57,32 @@ You can use environment variables to control the behavior.
 
 ## Consuming The Data
 
-Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>` using JSON serialization. It will arrive whenever a change happens and takes the following form:
+Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and takes the following form:
 
 ```json
 {
-  'name': <Container Name>,
-  'image': <Container Image>,
-  'status': <'paused', 'running', or 'stopped'>,
-  'state': <'on' or 'off'>
+  "name": "<Container Name>",
+  "image": "<Container Image>",
+  "status": "<'paused', 'running', or 'stopped'>",
+  "state": "<'on' or 'off'>"
+}
+```
+
+Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so and takes the following form:
+
+```json
+{
+  "name": "<name>", 
+  "host": "<host>", 
+  "memoryused": 53.11,
+  "memorylimit": 15605.76, 
+  "netinput": 1.23, 
+  "netoutput": 40.5, 
+  "blockinput": 124.0, 
+  "blockoutput": 0.0, 
+  "memory": "53.11MiB / 15.24GiB", 
+  "cpu": 0.0, 
+  "netio": "1.23MB / 40.5MB"
 }
 ```
 
