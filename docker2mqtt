@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.5.4"
+__version__ = "1.6.0"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -56,6 +56,20 @@ invalid_ha_topic_chars = re.compile(r'[^a-zA-Z0-9_-]')
 ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
 docker_version = None
+
+STATS_REGISTRATION_ENTRIES = [
+    # label,field,device_class,unit
+    ('CPU', 'cpu', 'power_factor', None),
+    ('Memory', 'memoryused', 'data_size', 'MB'),
+    ('Network Input', 'netin', 'data_size', 'MB'),
+    ('Network Output', 'netout', 'data_size', 'MB'),
+    ('Network Input Rate', 'netinrate', 'data_rate', 'MB/s'),
+    ('Network Output Rate', 'netoutrate', 'data_rate', 'MB/s'),
+    ('Block Input', 'blockin', 'data_size', 'MB'),
+    ('Block Output', 'blockout', 'data_size', 'MB'),
+    ('Block Input Rate', 'blockinrate', 'data_rate', 'MB/s'),
+    ('Block Output Rate', 'blockoutrate', 'data_rate', 'MB/s'),
+]
 
 
 @atexit.register
@@ -170,112 +184,25 @@ def register_container(container_entry):
 
     # Stats
 
-    registration_topic_cpu = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats"))
-    registration_packet_cpu = {
-        'name': "CPU",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_cpu}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.cpu if value_json is not undefined and value_json.cpu is not undefined else 0 }}',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device_class': 'power_factor',
-        'device': device_definition(container_entry),
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_cpu, json.dumps(registration_packet_cpu), retain=True)
 
-    registration_topic_memory = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats"))
-    registration_packet_memory = {
-        'name': "Memory",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_memory}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.memoryused if value_json is not undefined and value_json.memoryused is not undefined else 0 }}',
-        'unit_of_measurement': 'MB',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device': device_definition(container_entry),
-        'device_class': 'data_size',
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_memory, json.dumps(registration_packet_memory), retain=True)
-
-    registration_topic_netin = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats"))
-    registration_packet_netin = {
-        'name': "Network IN",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netin}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.netinput if value_json is not undefined and value_json.netinput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device': device_definition(container_entry),
-        'device_class': 'data_size',
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_netin, json.dumps(registration_packet_netin), retain=True)
-
-    registration_topic_netout = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats"))
-    registration_packet_netout = {
-        'name': "Network OUT",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netout}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.netoutput if value_json is not undefined and value_json.netoutput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device': device_definition(container_entry),
-        'device_class': 'data_size',
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_netout, json.dumps(registration_packet_netout), retain=True)
-
-    registration_topic_blockin = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockin_stats"))
-    registration_packet_blockin = {
-        'name': "Block READ",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_blockin}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.blockinput if value_json is not undefined and value_json.blockinput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device': device_definition(container_entry),
-        'device_class': 'data_size',
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_blockin, json.dumps(registration_packet_blockin), retain=True)
-
-    registration_topic_blockout = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockout_stats"))
-    registration_packet_blockout = {
-        'name': "Block WRITE",
-        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_blockout}',
-        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
-        'payload_available': 'online',
-        'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.blockoutput if value_json is not undefined and value_json.blockoutput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB',
-        'payload_on': 'on',
-        'payload_off': 'off',
-        'device': device_definition(container_entry),
-        'device_class': 'data_size',
-        'qos': MQTT_QOS,
-    }
-    mqtt_send(registration_topic_blockout, json.dumps(registration_packet_blockout), retain=True)
+    for label, field, device_class, unit in STATS_REGISTRATION_ENTRIES:
+        registration_topic = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_{field}_stats"))
+        registration_packet = {
+            'name': label,
+            'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic}',
+            'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
+            'payload_available': 'online',
+            'payload_not_available': 'offline',
+            'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
+            'value_template': f'{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else 0 }}}}',
+            'unit_of_measurement': unit,
+            'payload_on': 'on',
+            'payload_off': 'off',
+            'device_class': device_class,
+            'device': device_definition(container_entry),
+            'qos': MQTT_QOS,
+        }
+        mqtt_send(registration_topic, json.dumps(registration_packet), retain=True)
 
     # Send an empty message at first
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats', json.dumps({}), retain=True)
@@ -293,12 +220,8 @@ def unregister_container(container_entry):
 
     # Stats
 
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockin_stats")), '', retain=True)
-    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockout_stats")), '', retain=True)
+    for _, field, _, _ in STATS_REGISTRATION_ENTRIES:
+        mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_{field}_stats")), '', retain=True)
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', '', retain=True)
 
 def stat_to_value(stat, container, matches):
@@ -610,6 +533,7 @@ if __name__ == '__main__':
                         if statkey != existingstatkey and containerdate <= checkdate:
                             if bDebugStat:
                                 print("STAT: Processing %s stats" % container)
+                            container_old_stats = known_stat_containers[container]
                             container_stats = {}
                             container_stats['name'] = container
                             container_stats['host'] = f'{DOCKER2MQTT_HOSTNAME}'
@@ -634,6 +558,8 @@ if __name__ == '__main__':
                             netinput, netoutput = stat_to_value("NETIO",container,matches)
                             container_stats['netinput'] = netinput
                             container_stats['netoutput'] = netoutput
+                            container_stats['netinputrate'] = max(0, (container_old_stats.get('netinput', 0)) - netinput) / STATSRECORDSECONDS
+                            container_stats['netoutputrate'] = max(0, (container_old_stats.get('netoutput', 0)) - netoutput) / STATSRECORDSECONDS
 
                             if bDebugStat:
                                 print("STATS: Getting BLOCKIO from \"%s\" with \"%s\"" % (stat['BlockIO'], regex))
@@ -641,6 +567,8 @@ if __name__ == '__main__':
                             blockinput,blockoutput = stat_to_value("BLOCKIO",container,matches)
                             container_stats['blockinput'] = blockinput
                             container_stats['blockoutput'] = blockoutput
+                            container_stats['blockinputrate'] = max(0, (container_old_stats.get('blockinput', 0)) - blockinput) / STATSRECORDSECONDS
+                            container_stats['blockoutputrate'] = max(0, (container_old_stats.get('blockoutput', 0)) - blockoutput) / STATSRECORDSECONDS
 
                             container_stats['memory'] = stat['MemUsage']
                             container_stats['cpu'] = float(stat['CPUPerc'].strip('%'))
@@ -657,6 +585,14 @@ if __name__ == '__main__':
                                 print ("STATS: Not processing record as duplicate record or too young: %s " % container)
                         #if stat not in known_event_containers[container]['json']:
 
+                    except IndexError as ex:
+                        raise ex
+                    except ValueError as ex:
+                        raise ex
+                    except ReferenceError as ex:
+                        raise ex
+                    except TypeError as ex:
+                        raise ex
                     except Exception as ex:
                         print("STATS: error parsing linestats: " + str(ex))
                         print("STATS: ERROR parsing linestats: " + linestats)
@@ -669,4 +605,5 @@ if __name__ == '__main__':
             sleep(0.2)
 
     except Exception as ex:
+        print(ex)
         print("Error processing: " + str(ex))
