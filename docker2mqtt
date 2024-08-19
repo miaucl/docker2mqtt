@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -201,8 +201,6 @@ def register_container(container_entry):
         'payload_off': 'off',
         'device': device_definition(container_entry),
         'device_class': 'data_size',
-        'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        #'json_attributes_template': '{{ { "memorylimit": value_json.memorylimit, "memory": value_json.memory } }}',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_memory, json.dumps(registration_packet_memory), retain=True)
@@ -221,8 +219,6 @@ def register_container(container_entry):
         'payload_off': 'off',
         'device': device_definition(container_entry),
         'device_class': 'data_size',
-        'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        #'json_attributes_template': '{{ { "blockinput": value_json.blockinput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_netin, json.dumps(registration_packet_netin), retain=True)
