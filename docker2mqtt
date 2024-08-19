@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.6.5"
+__version__ = "1.6.6"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -47,6 +47,7 @@ bEvents = False
 
 known_event_containers = {}
 known_stat_containers = {}
+last_stat_containers = {}
 pending_destroy_operations = {}
 docker_events_cmd = ['docker', 'events', '-f', 'type=container', '--format', '{{json .}}']
 docker_ps_cmd = ['docker', 'ps', '-a', '--format', '{{json .}}']
@@ -516,6 +517,7 @@ if __name__ == '__main__':
                             known_stat_containers[container]['name'] = container
                             known_stat_containers[container]['key'] = ""
                             known_stat_containers[container]['last'] = datetime.datetime(2020,1,1)
+                            last_stat_containers[container] = {}
 
 
                         if bDebugStat:
@@ -532,12 +534,12 @@ if __name__ == '__main__':
                         if statkey != existingstatkey and containerdate <= checkdate:
                             if bDebugStat:
                                 print("STAT: Processing %s stats" % container)
-                            container_old_stats = known_stat_containers[container]
                             container_stats = {}
                             container_stats['name'] = container
                             container_stats['host'] = f'{DOCKER2MQTT_HOSTNAME}'
                             known_stat_containers[container]['key'] = statkey
                             known_stat_containers[container]['last'] = datetime.datetime.now()
+                            delta_seconds = (known_stat_containers[container]['last'] - containerdate).total_seconds()
 
                             #"61.13MiB / 2.86GiB"
                             #regex = r"(?P<used>\d+?\.?\d+?)(?P<usedsymbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limitsymbol>[MG]iB)"
@@ -557,8 +559,8 @@ if __name__ == '__main__':
                             netinput, netoutput = stat_to_value("NETIO",container,matches)
                             container_stats['netinput'] = netinput
                             container_stats['netoutput'] = netoutput
-                            container_stats['netinputrate'] = max(0, (netinput - container_old_stats.get('netinput', 0))) / STATSRECORDSECONDS
-                            container_stats['netoutputrate'] = max(0, (netoutput - container_old_stats.get('netoutput', 0))) / STATSRECORDSECONDS
+                            container_stats['netinputrate'] = max(0, (netinput - last_stat_containers[container].get('netinput', 0))) / delta_seconds
+                            container_stats['netoutputrate'] = max(0, (netoutput - last_stat_containers[container].get('netoutput', 0))) / delta_seconds
 
                             if bDebugStat:
                                 print("STATS: Getting BLOCKIO from \"%s\" with \"%s\"" % (stat['BlockIO'], regex))
@@ -566,8 +568,8 @@ if __name__ == '__main__':
                             blockinput,blockoutput = stat_to_value("BLOCKIO",container,matches)
                             container_stats['blockinput'] = blockinput
                             container_stats['blockoutput'] = blockoutput
-                            container_stats['blockinputrate'] = max(0, (blockinput - container_old_stats.get('blockinput', 0))) / STATSRECORDSECONDS
-                            container_stats['blockoutputrate'] = max(0, (blockoutput - container_old_stats.get('blockoutput', 0))) / STATSRECORDSECONDS
+                            container_stats['blockinputrate'] = max(0, (blockinput - last_stat_containers[container].get('blockinput', 0))) / delta_seconds
+                            container_stats['blockoutputrate'] = max(0, (blockoutput - last_stat_containers[container].get('blockoutput', 0))) / delta_seconds
 
                             container_stats['memory'] = stat['MemUsage']
                             container_stats['cpu'] = float(stat['CPUPerc'].strip('%'))
@@ -579,6 +581,7 @@ if __name__ == '__main__':
                             if bDebugStat:
                                 print("STATS: Sending mqtt payload")
                             mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', json.dumps(container_stats), retain=False)
+                            last_stat_containers[container] = container_stats
                         else:
                             if bDebugStat:
                                 print ("STATS: Not processing record as duplicate record or too young: %s " % container)
