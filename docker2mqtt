@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.6.4"
+__version__ = "1.6.5"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -557,8 +557,8 @@ if __name__ == '__main__':
                             netinput, netoutput = stat_to_value("NETIO",container,matches)
                             container_stats['netinput'] = netinput
                             container_stats['netoutput'] = netoutput
-                            container_stats['netinputrate'] = max(0, (container_old_stats.get('netinput', 0)) - netinput) / STATSRECORDSECONDS
-                            container_stats['netoutputrate'] = max(0, (container_old_stats.get('netoutput', 0)) - netoutput) / STATSRECORDSECONDS
+                            container_stats['netinputrate'] = max(0, (netinput - container_old_stats.get('netinput', 0))) / STATSRECORDSECONDS
+                            container_stats['netoutputrate'] = max(0, (netoutput - container_old_stats.get('netoutput', 0))) / STATSRECORDSECONDS
 
                             if bDebugStat:
                                 print("STATS: Getting BLOCKIO from \"%s\" with \"%s\"" % (stat['BlockIO'], regex))
@@ -566,8 +566,8 @@ if __name__ == '__main__':
                             blockinput,blockoutput = stat_to_value("BLOCKIO",container,matches)
                             container_stats['blockinput'] = blockinput
                             container_stats['blockoutput'] = blockoutput
-                            container_stats['blockinputrate'] = max(0, (container_old_stats.get('blockinput', 0)) - blockinput) / STATSRECORDSECONDS
-                            container_stats['blockoutputrate'] = max(0, (container_old_stats.get('blockoutput', 0)) - blockoutput) / STATSRECORDSECONDS
+                            container_stats['blockinputrate'] = max(0, (blockinput - container_old_stats.get('blockinput', 0))) / STATSRECORDSECONDS
+                            container_stats['blockoutputrate'] = max(0, (blockoutput - container_old_stats.get('blockoutput', 0))) / STATSRECORDSECONDS
 
                             container_stats['memory'] = stat['MemUsage']
                             container_stats['cpu'] = float(stat['CPUPerc'].strip('%'))
