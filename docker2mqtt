@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.6.6"
+__version__ = "1.6.7"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -604,7 +604,7 @@ if __name__ == '__main__':
 
 
                 #if bDebug: print ("STATS: %s" % linestats)
-            sleep(0.2)
+            sleep(0.02)
 
     except Exception as ex:
         print(ex)
