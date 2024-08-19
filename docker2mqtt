@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.5.3"
+__version__ = "1.5.4"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -212,7 +212,7 @@ def register_container(container_entry):
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netin',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'value_template': '{{ value_json.netinput if value_json is not undefined and value_json.netinput is not undefined else 0 }}',
         'unit_of_measurement': 'MB',
         'payload_on': 'on',
@@ -230,7 +230,7 @@ def register_container(container_entry):
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netout',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'value_template': '{{ value_json.netoutput if value_json is not undefined and value_json.netoutput is not undefined else 0 }}',
         'unit_of_measurement': 'MB',
         'payload_on': 'on',
@@ -248,7 +248,7 @@ def register_container(container_entry):
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/blockin',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'value_template': '{{ value_json.blockinput if value_json is not undefined and value_json.blockinput is not undefined else 0 }}',
         'unit_of_measurement': 'MB',
         'payload_on': 'on',
@@ -266,7 +266,7 @@ def register_container(container_entry):
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
-        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/blockout',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         'value_template': '{{ value_json.blockoutput if value_json is not undefined and value_json.blockoutput is not undefined else 0 }}',
         'unit_of_measurement': 'MB',
         'payload_on': 'on',
