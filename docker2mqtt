@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -53,6 +53,7 @@ docker_ps_cmd = ['docker', 'ps', '-a', '--format', '{{json .}}']
 docker_stats_cmd = ['docker','stats','--format','{{json .}}']
 docker_version_cmd = ['docker','--version']
 invalid_ha_topic_chars = re.compile(r'[^a-zA-Z0-9_-]')
+ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
 docker_version = None
 
@@ -96,13 +97,15 @@ def readline_thread():
     """
     try:
         print("starting events thread")
-        with Popen(docker_events_cmd,stdout=PIPE, text=True) as process:
+        with Popen(docker_events_cmd, stdout=PIPE, text=True) as process:
             while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
+                line = ansi_escape.sub('', process.stdout.readline())
+                if line == '' and process.poll() is not None:
                     break
-                if output:
-                    docker_events.put(output.strip())
+                if line:
+                    if bDebug:
+                        print("Read docker event line: " + line)
+                    docker_events.put(line.strip())
                 _rc = process.poll()
     except Exception as ex:
         print("Error Running Events thread: " + str(ex))
@@ -118,7 +121,14 @@ def readline_stats_thread():
             print(docker_stats_cmd)
         with Popen(docker_stats_cmd, stdout=PIPE, text=True) as process:
             while True:
-                docker_stats.put(process.stdout.readline().strip())
+                line = ansi_escape.sub('', process.stdout.readline())
+                if line == '' and process.poll() is not None:
+                    break
+                if line:
+                    if bDebugStat:
+                        print("Read docker stats line: " + line)
+                    docker_stats.put(line.strip())
+                _rc = process.poll()
     except Exception as ex:
         print("Error Running stats thread: " + str(ex))
         sys.exit(0)
@@ -147,7 +157,7 @@ def register_container(container_entry):
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/events',
-        'value_template': '{{ value_json.state }}',
+        'value_template': '{{ value_json.state if value_json is not undefined and value_json.state is not undefined else "off" }}',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
@@ -168,7 +178,7 @@ def register_container(container_entry):
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.cpu }}',
+        'value_template': '{{ value_json.cpu if value_json is not undefined and value_json.cpu is not undefined else 0 }}',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
@@ -184,14 +194,14 @@ def register_container(container_entry):
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'value_template': '{{ value_json.memoryused }}',
+        'value_template': '{{ value_json.memoryused if value_json is not undefined and value_json.memoryused is not undefined else 0 }}',
         'unit_of_measurement': 'MB',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
         'device_class': 'data_size',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'json_attributes_template': '{{ { "memorylimit": value_json.memorylimit, "memory": value_json.memory } }}',
+        #'json_attributes_template': '{{ { "memorylimit": value_json.memorylimit, "memory": value_json.memory } }}',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_memory, json.dumps(registration_packet_memory), retain=True)
@@ -204,14 +214,14 @@ def register_container(container_entry):
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netin',
-        'value_template': '{{ value_json.netinput }}',
+        'value_template': '{{ value_json.netinput if value_json is not undefined and value_json.netinput is not undefined else 0 }}',
         'unit_of_measurement': 'MB/s',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
         'device_class': 'data_rate',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'json_attributes_template': '{{ { "blockinput": value_json.blockinput, "netio": value_json.netio } }}',
+        #'json_attributes_template': '{{ { "blockinput": value_json.blockinput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_netin, json.dumps(registration_packet_netin), retain=True)
@@ -224,14 +234,14 @@ def register_container(container_entry):
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netout',
-        'value_template': '{{ value_json.netoutput }}',
+        'value_template': '{{ value_json.netoutput if value_json is not undefined and value_json.netoutput is not undefined else 0 }}',
         'unit_of_measurement': 'MB/s',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
         'device_class': 'data_rate',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        'json_attributes_template': '{{ { "blockoutput": value_json.blockoutput, "netio": value_json.netio } }}',
+        #'json_attributes_template': '{{ { "blockoutput": value_json.blockoutput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_netout, json.dumps(registration_packet_netout), retain=True)
@@ -407,11 +417,12 @@ if __name__ == '__main__':
                     del(pending_destroy_operations[container])
 
             # Collect and process an event from `docker events`
+            docker_events_qsize = docker_events.qsize()
             try:
                 if bEvents:
                     line = docker_events.get(block=False)
                 if bDebug:
-                    print("Events length: %s" % docker_events.qsize())
+                    print("Events length: %s" % docker_events_qsize)
                 if bEvents and not docker_events_t.is_alive:
                     print("Starting EVENTS thread")
                     docker_events_t.start()
@@ -422,12 +433,13 @@ if __name__ == '__main__':
             
             # Collect and process an event from `docker stats`
             #if bDebug: print("Looking for line stats")
+            docker_stats_qsize = docker_stats.qsize()
             try:
                 if bStats:
                     linestats = docker_stats.get(block=False)
                 #if bDebug: print(linestats)
                 if bDebugStat:
-                    print("Stats length: %s" % docker_stats.qsize())
+                    print("Stats length: %s" % docker_stats_qsize)
                 if bStats and not docker_stats_t.is_alive:
                     print("Starting STATS thread")
                     docker_stats_t.start()
@@ -435,7 +447,7 @@ if __name__ == '__main__':
                 # No data right now, just move along.
                 pass
 
-            if bEvents and docker_events.qsize() > 0:
+            if bEvents and docker_events_qsize > 0:
                 try:
                     if line and len(line) > 0:
                         event = json.loads(line)
@@ -524,7 +536,7 @@ if __name__ == '__main__':
 
             #{"BlockIO":"408MB / 0B","CPUPerc":"0.03%","Container":"9460abca90f1","ID":"9460abca90f1","MemPerc":"22.84%","MemUsage":"9.137MiB / 40MiB","Name":"d2mqtt","NetIO":"882kB / 1.19MB","PIDs":"11"}
             #{"BlockIO":"--","CPUPerc":"--","Container":"b5ad8ff32144","ID":"b5ad8ff32144","MemPerc":"--","MemUsage":"-- / --","Name":"cameraevents","NetIO":"--","PIDs":"--"}
-            if bStats and docker_stats.qsize() > 0:
+            if bStats and docker_stats_qsize > 0:
                 #if bDebug: print("STATS: loading line as JSON: " + linestats)
                 if linestats:
                     linestats = ''.join([c for c in linestats if ord(c) > 31 or ord(c) == 9])
@@ -532,7 +544,7 @@ if __name__ == '__main__':
                     #print(':'.join(hex(ord(x))[2:] for x in linestats))
                     try:
                         if bDebugStat:
-                            print("Stats length: %s" % docker_stats.qsize())
+                            print("Stats length: %s" % docker_stats_qsize)
                         stat = json.loads(linestats)
                         #print("STATS: loaded json")
                         #print(stat)
