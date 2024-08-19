@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.6.3"
+__version__ = "1.6.4"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -194,7 +194,7 @@ def register_container(container_entry):
             'payload_available': 'online',
             'payload_not_available': 'offline',
             'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-            'value_template': f'{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else 0 }}}}',
+            'value_template': f'{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else "unknown" }}}}',
             'unit_of_measurement': unit,
             'icon': icon,
             'device_class': device_class,
