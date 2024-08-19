@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -58,17 +58,17 @@ ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 docker_version = None
 
 STATS_REGISTRATION_ENTRIES = [
-    # label,field,device_class,unit
-    ('CPU', 'cpu', 'power_factor', None),
-    ('Memory', 'memoryused', 'data_size', 'MB'),
-    ('Network Input', 'netin', 'data_size', 'MB'),
-    ('Network Output', 'netout', 'data_size', 'MB'),
-    ('Network Input Rate', 'netinrate', 'data_rate', 'MB/s'),
-    ('Network Output Rate', 'netoutrate', 'data_rate', 'MB/s'),
-    ('Block Input', 'blockin', 'data_size', 'MB'),
-    ('Block Output', 'blockout', 'data_size', 'MB'),
-    ('Block Input Rate', 'blockinrate', 'data_rate', 'MB/s'),
-    ('Block Output Rate', 'blockoutrate', 'data_rate', 'MB/s'),
+    # label,field,device_class,unit,icon
+    ('CPU', 'cpu', 'power_factor', None, 'mdi:cpu-64-bit'),
+    ('Memory', 'memoryused', 'data_size', 'MB', 'mdi:memory'),
+    ('Network Input', 'netin', 'data_size', 'MB', 'mdi:download-network'),
+    ('Network Output', 'netout', 'data_size', 'MB', 'mdi:upload-network'),
+    ('Network Input Rate', 'netinrate', 'data_rate', 'MB/s', 'mdi:download-network-outline'),
+    ('Network Output Rate', 'netoutrate', 'data_rate', 'MB/s', 'mdi:upload-network-outline'),
+    ('Block Input', 'blockin', 'data_size', 'MB', 'mdi:database-arrow-up'),
+    ('Block Output', 'blockout', 'data_size', 'MB', 'mdi:database-arrow-down'),
+    ('Block Input Rate', 'blockinrate', 'data_rate', 'MB/s', 'mdi:database-arrow-up-outline'),
+    ('Block Output Rate', 'blockoutrate', 'data_rate', 'MB/s', 'mdi:database-arrow-down-outline'),
 ]
 
 
@@ -185,7 +185,7 @@ def register_container(container_entry):
     # Stats
 
 
-    for label, field, device_class, unit in STATS_REGISTRATION_ENTRIES:
+    for label, field, device_class, unit, icon in STATS_REGISTRATION_ENTRIES:
         registration_topic = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_{field}_stats"))
         registration_packet = {
             'name': label,
@@ -196,8 +196,7 @@ def register_container(container_entry):
             'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
             'value_template': f'{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else 0 }}}}',
             'unit_of_measurement': unit,
-            'payload_on': 'on',
-            'payload_off': 'off',
+            'icon': icon,
             'device_class': device_class,
             'device': device_definition(container_entry),
             'qos': MQTT_QOS,
