@@ -18,7 +18,7 @@ from time import sleep, time
 
 import paho.mqtt.client
 
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 DEBUG = environ.get('DEBUG', '0')
 DEBUGSTAT = environ.get('DEBUGSTAT', '0')
@@ -172,7 +172,7 @@ def register_container(container_entry):
 
     registration_topic_cpu = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_cpu_stats"))
     registration_packet_cpu = {
-        'name': "CPU Stats",
+        'name': "CPU",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_cpu}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -181,6 +181,7 @@ def register_container(container_entry):
         'value_template': '{{ value_json.cpu if value_json is not undefined and value_json.cpu is not undefined else 0 }}',
         'payload_on': 'on',
         'payload_off': 'off',
+        'device_class': 'power',
         'device': device_definition(container_entry),
         'qos': MQTT_QOS,
     }
@@ -188,7 +189,7 @@ def register_container(container_entry):
 
     registration_topic_memory = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats"))
     registration_packet_memory = {
-        'name': "Memory Stats",
+        'name': "Memory",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_memory}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
@@ -208,18 +209,18 @@ def register_container(container_entry):
 
     registration_topic_netin = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats"))
     registration_packet_netin = {
-        'name': "Network IN Stats",
+        'name': "Network IN",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netin}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netin',
         'value_template': '{{ value_json.netinput if value_json is not undefined and value_json.netinput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB/s',
+        'unit_of_measurement': 'MB',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'data_rate',
+        'device_class': 'data_size',
         'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
         #'json_attributes_template': '{{ { "blockinput": value_json.blockinput, "netio": value_json.netio } }}',
         'qos': MQTT_QOS,
@@ -228,23 +229,57 @@ def register_container(container_entry):
 
     registration_topic_netout = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats"))
     registration_packet_netout = {
-        'name': "Network OUT Stats",
+        'name': "Network OUT",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_netout}',
         'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
         'payload_available': 'online',
         'payload_not_available': 'offline',
         'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/netout',
         'value_template': '{{ value_json.netoutput if value_json is not undefined and value_json.netoutput is not undefined else 0 }}',
-        'unit_of_measurement': 'MB/s',
+        'unit_of_measurement': 'MB',
         'payload_on': 'on',
         'payload_off': 'off',
         'device': device_definition(container_entry),
-        'device_class': 'data_rate',
-        'json_attributes_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats',
-        #'json_attributes_template': '{{ { "blockoutput": value_json.blockoutput, "netio": value_json.netio } }}',
+        'device_class': 'data_size',
         'qos': MQTT_QOS,
     }
     mqtt_send(registration_topic_netout, json.dumps(registration_packet_netout), retain=True)
+
+    registration_topic_blockin = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockin_stats"))
+    registration_packet_blockin = {
+        'name': "Block READ",
+        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_blockin}',
+        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
+        'payload_available': 'online',
+        'payload_not_available': 'offline',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/blockin',
+        'value_template': '{{ value_json.blockinput if value_json is not undefined and value_json.blockinput is not undefined else 0 }}',
+        'unit_of_measurement': 'MB',
+        'payload_on': 'on',
+        'payload_off': 'off',
+        'device': device_definition(container_entry),
+        'device_class': 'data_size',
+        'qos': MQTT_QOS,
+    }
+    mqtt_send(registration_topic_blockin, json.dumps(registration_packet_blockin), retain=True)
+
+    registration_topic_blockout = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockout_stats"))
+    registration_packet_blockout = {
+        'name': "Block WRITE",
+        'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic_blockout}',
+        'availability_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status',
+        'payload_available': 'online',
+        'payload_not_available': 'offline',
+        'state_topic': f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/blockout',
+        'value_template': '{{ value_json.blockoutput if value_json is not undefined and value_json.blockoutput is not undefined else 0 }}',
+        'unit_of_measurement': 'MB',
+        'payload_on': 'on',
+        'payload_off': 'off',
+        'device': device_definition(container_entry),
+        'device_class': 'data_size',
+        'qos': MQTT_QOS,
+    }
+    mqtt_send(registration_topic_blockout, json.dumps(registration_packet_blockout), retain=True)
 
     # Send an empty message at first
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats', json.dumps({}), retain=True)
@@ -266,6 +301,8 @@ def unregister_container(container_entry):
     mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_memory_stats")), '', retain=True)
     mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netin_stats")), '', retain=True)
     mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_netout_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockin_stats")), '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_blockout_stats")), '', retain=True)
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', '', retain=True)
 
 def stat_to_value(stat, container, matches):
