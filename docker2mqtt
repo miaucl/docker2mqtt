@@ -10,6 +10,7 @@ import hashlib
 import datetime
 import platform
 import subprocess
+import logging
 from os import environ
 from socket import gethostname
 from subprocess import run, Popen, PIPE
@@ -18,11 +19,14 @@ from time import sleep, time
 
 import paho.mqtt.client
 
+# Configure logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 # Version
 __version__ = "1.6.11"
 
-DEBUG = environ.get('DEBUG', '0')
-DEBUGSTAT = environ.get('DEBUGSTAT', '0')
+# Env config
+LOG_LEVEL = environ.get('LOG_LEVEL', 'INFO')
 DESTROYED_CONTAINER_TTL = int(environ.get('DESTROYED_CONTAINER_TTL', 24*60*60))
 HOMEASSISTANT_PREFIX = environ.get('HOMEASSISTANT_PREFIX', 'homeassistant')
 DOCKER2MQTT_HOSTNAME = environ.get('DOCKER2MQTT_HOSTNAME', gethostname())
@@ -33,52 +37,64 @@ MQTT_HOST = environ.get('MQTT_HOST', 'localhost')
 MQTT_PORT = int(environ.get('MQTT_PORT', '1883'))
 MQTT_TIMEOUT = int(environ.get('MQTT_TIMEOUT', '30'))
 MQTT_TOPIC_PREFIX = environ.get('MQTT_TOPIC_PREFIX', 'docker')
-MQTT_QOS = int(environ.get('MQTT_QOS', 1))
+MQTT_QOS = int(environ.get('MQTT_QOS', '1'))
+EVENTS = int(environ.get('EVENTS','0'))
+STATS = int(environ.get('STATS','0'))
+STATSRECORDSECONDS = int(environ.get('STATS_RECORD_SECONDS', '30'))
+
+# Const
 DISCOVERY_TOPIC_BINARY_SENSOR = f'{HOMEASSISTANT_PREFIX}/binary_sensor/{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}_{{}}/config'
 DISCOVERY_TOPIC_SENSOR = f'{HOMEASSISTANT_PREFIX}/sensor/{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}_{{}}/config'
 WATCHED_EVENTS = ('create', 'destroy', 'die', 'pause', 'rename', 'start', 'stop', 'unpause')
-STATS = environ.get('STATS','0')
-STATSRECORDSECONDS = environ.get('STATS_RECORD_SECONDS',30)
-EVENTS = environ.get('EVENTS','0')
 MAX_QUEUE_SIZE = 100
+DOCKER_EVENTS_CMD = ['docker', 'events', '-f', 'type=container', '--format', '{{json .}}']
+DOCKER_PS_CMD = ['docker', 'ps', '-a', '--format', '{{json .}}']
+DOCKER_STATS_CMD = ['docker','stats','--format','{{json .}}']
+DOCKER_VERSION_CMD = ['docker','--version']
+INVALID_HA_TOPIC_CHARS = re.compile(r'[^a-zA-Z0-9_-]')
+ANSI_ESCAPE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+STATS_REGISTRATION_ENTRIES = [
+    # label,field,device_class,unit,icon
+    ('CPU',                     'cpu',              None,           '%',    'mdi:cpu-64-bit'),
+    ('Memory',                  'memoryused',       'data_size',    'MB',   'mdi:memory'),
+    ('Network Input',           'netinput',         'data_size',    'MB',   'mdi:download-network'),
+    ('Network Output',          'netoutput',        'data_size',    'MB',   'mdi:upload-network'),
+    ('Network Input Rate',      'netinputrate',     'data_rate',    'MB/s', 'mdi:download-network-outline'),
+    ('Network Output Rate',     'netoutputrate',    'data_rate',    'MB/s', 'mdi:upload-network-outline'),
+    ('Block Input',             'blockinput',       'data_size',    'MB',   'mdi:database-arrow-up'),
+    ('Block Output',            'blockoutput',      'data_size',    'MB',   'mdi:database-arrow-down'),
+    ('Block Input Rate',        'blockinputrate',   'data_rate',    'MB/s', 'mdi:database-arrow-up-outline'),
+    ('Block Output Rate',       'blockoutputrate',  'data_rate',    'MB/s', 'mdi:database-arrow-down-outline'),
+]
 
 bDebug = False
 bDebugStat = False
 bStats = False
 bEvents = False
 
+# Globals
+docker_events = None
+docker_stats = None
 known_event_containers = {}
 known_stat_containers = {}
 last_stat_containers = {}
 pending_destroy_operations = {}
-docker_events_cmd = ['docker', 'events', '-f', 'type=container', '--format', '{{json .}}']
-docker_ps_cmd = ['docker', 'ps', '-a', '--format', '{{json .}}']
-docker_stats_cmd = ['docker','stats','--format','{{json .}}']
-docker_version_cmd = ['docker','--version']
-invalid_ha_topic_chars = re.compile(r'[^a-zA-Z0-9_-]')
-ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
 docker_version = None
 
-STATS_REGISTRATION_ENTRIES = [
-    # label,field,device_class,unit,icon
-    ('CPU', 'cpu', None, '%', 'mdi:cpu-64-bit'),
-    ('Memory', 'memoryused', 'data_size', 'MB', 'mdi:memory'),
-    ('Network Input', 'netinput', 'data_size', 'MB', 'mdi:download-network'),
-    ('Network Output', 'netoutput', 'data_size', 'MB', 'mdi:upload-network'),
-    ('Network Input Rate', 'netinputrate', 'data_rate', 'MB/s', 'mdi:download-network-outline'),
-    ('Network Output Rate', 'netoutputrate', 'data_rate', 'MB/s', 'mdi:upload-network-outline'),
-    ('Block Input', 'blockinput', 'data_size', 'MB', 'mdi:database-arrow-up'),
-    ('Block Output', 'blockoutput', 'data_size', 'MB', 'mdi:database-arrow-down'),
-    ('Block Input Rate', 'blockinputrate', 'data_rate', 'MB/s', 'mdi:database-arrow-up-outline'),
-    ('Block Output Rate', 'blockoutputrate', 'data_rate', 'MB/s', 'mdi:database-arrow-down-outline'),
-]
+# Loggers
+main_logger = logging.getLogger('main')
+main_logger.setLevel(LOG_LEVEL.upper())
+events_logger = logging.getLogger('events')
+events_logger.setLevel(LOG_LEVEL.upper())
+stats_logger = logging.getLogger('main')
+stats_logger.setLevel(LOG_LEVEL.upper())
+
 
 
 @atexit.register
 def mqtt_disconnect():
-    """Called by atexit to make sure we send our last_will message.
-    """
+    """Called by atexit to make sure we send our last_will message."""
     mqtt.publish(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status', 'offline', qos=MQTT_QOS, retain=True)
     mqtt.publish(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/version', __version__, qos=MQTT_QOS, retain=True)
     mqtt.disconnect()
@@ -86,9 +102,10 @@ def mqtt_disconnect():
     mqtt.loop_stop()
 
 def get_docker_version():
+    """Get the docker version and save it to a global value"""
     try:
         # Run the `docker --version` command
-        result = subprocess.run(docker_version_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(DOCKER_VERSION_CMD, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         # Check if the command was successful
         if result.returncode == 0:
@@ -101,58 +118,59 @@ def get_docker_version():
 
 
 def mqtt_send(topic, payload, retain=False):
+    """Send a mqtt payload to for a topic."""
     try:
-        if bDebugStat: 
-            print(f'Sending to MQTT: {topic}: {payload}')
+        main_logger.debug('Sending to MQTT: %s: %s', topic, payload)
         mqtt.publish(topic, payload=payload, qos=MQTT_QOS, retain=retain)
 
     except Exception as e:
-        print(f'MQTT Publish Failed: {e}')
+        main_logger.error('MQTT Publish Failed: %s', str(e))
+        print(e)
 
-def readline_thread():
-    """Run docker events and continually read lines from it.
-    """
+def readline_events_thread():
+    """Run docker events and continually read lines from it."""
+    thread_logger = logging.getLogger('event-thread')
+    thread_logger.setLevel(LOG_LEVEL.upper())
     try:
-        print("starting events thread")
-        with Popen(docker_events_cmd, stdout=PIPE, text=True) as process:
+        thread_logger.info("Starting events thread")
+        thread_logger.debug("Command: %s", DOCKER_EVENTS_CMD)
+        with Popen(DOCKER_EVENTS_CMD, stdout=PIPE, text=True) as process:
             while True:
-                line = ansi_escape.sub('', process.stdout.readline())
+                line = ANSI_ESCAPE.sub('', process.stdout.readline())
                 if line == '' and process.poll() is not None:
                     break
                 if line:
-                    if bDebug:
-                        print("Read docker event line: " + line)
+                    thread_logger.debug("Read docker event line: %s", line)
                     docker_events.put(line.strip())
                 _rc = process.poll()
     except Exception as ex:
-        print("Error Running Events thread: " + str(ex))
-        sys.exit(0)
+        thread_logger.debug("Error Running Events thread:  %s", str(ex))
+        print(ex)
+        sys.exit(1)
 
 def readline_stats_thread():
-    """Run docker events and continually read lines from it.
-    """
+    """Run docker events and continually read lines from it."""
+    thread_logger = logging.getLogger('stats-thread')
+    thread_logger.setLevel(LOG_LEVEL.upper())
     try:
-        if bDebugStat:
-            print("STATS: STARTING STATS THREAD")
-        if bDebugStat:
-            print(docker_stats_cmd)
-        with Popen(docker_stats_cmd, stdout=PIPE, text=True) as process:
+        thread_logger.info("Starting stats thread")
+        thread_logger.debug("Command: %s", DOCKER_STATS_CMD)
+        with Popen(DOCKER_STATS_CMD, stdout=PIPE, text=True) as process:
             while True:
-                line = ansi_escape.sub('', process.stdout.readline())
+                line = ANSI_ESCAPE.sub('', process.stdout.readline())
                 if line == '' and process.poll() is not None:
                     break
                 if line:
-                    if bDebugStat:
-                        print("Read docker stats line: " + line)
+                    thread_logger.debug("Read docker stat line: %s", line)
                     docker_stats.put(line.strip())
                 _rc = process.poll()
     except Exception as ex:
-        print("Error Running stats thread: " + str(ex))
+        thread_logger.debug("Error Running Stats thread: %s", str(ex))
+        print(ex)
         sys.exit(0)
 
 def device_definition(container_entry):
-    """Create a device definition for a container.
-    """
+    """Create device definition of a container for each entity for home assistant."""
     return {
         'identifiers': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{container_entry['name']}',
         'name': f"{DOCKER2MQTT_HOSTNAME} {MQTT_TOPIC_PREFIX.title()} {container_entry['name']}",
@@ -160,13 +178,11 @@ def device_definition(container_entry):
     }
 
 def register_container(container_entry):
-    """Create a discovery topic for home assistant.
-    """
+    """Create discovery topics of container for all entities for home assistant."""
     known_event_containers[container_entry['name']] = container_entry
 
     # Events
-
-    registration_topic = DISCOVERY_TOPIC_BINARY_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events"))
+    registration_topic = DISCOVERY_TOPIC_BINARY_SENSOR.format(INVALID_HA_TOPIC_CHARS.sub('_', f"{container_entry['name']}_events"))
     registration_packet = {
         'name': "Events",
         'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic}',
@@ -186,10 +202,8 @@ def register_container(container_entry):
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/events', json.dumps(container_entry), retain=True)
 
     # Stats
-
-
     for label, field, device_class, unit, icon in STATS_REGISTRATION_ENTRIES:
-        registration_topic = DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_{field}_stats"))
+        registration_topic = DISCOVERY_TOPIC_SENSOR.format(INVALID_HA_TOPIC_CHARS.sub('_', f"{container_entry['name']}_{field}_stats"))
         registration_packet = {
             'name': label,
             'unique_id': f'{MQTT_TOPIC_PREFIX}_{DOCKER2MQTT_HOSTNAME}_{registration_topic}',
@@ -205,50 +219,40 @@ def register_container(container_entry):
             'qos': MQTT_QOS,
         }
         mqtt_send(registration_topic, json.dumps(registration_packet), retain=True)
-
-    # Send an empty message at first
     mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats', json.dumps({}), retain=True)
 
 
 def unregister_container(container_entry):
-    """Create a discovery topic for home assistant.
-    """
+    """Remove all discovery topics of container from home assistant."""
     known_event_containers[container_entry['name']] = container_entry
-
+    
     # Events
-
-    mqtt_send(DISCOVERY_TOPIC_BINARY_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_events")), '', retain=True)
-    mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/events', '', retain=True)
+    mqtt_send(DISCOVERY_TOPIC_BINARY_SENSOR.format(INVALID_HA_TOPIC_CHARS.sub('_', f"{container_entry['name']}_events")), '', retain=True)
+    mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/events', '', retain=True)
 
     # Stats
-
     for _, field, _, _ in STATS_REGISTRATION_ENTRIES:
-        mqtt_send(DISCOVERY_TOPIC_SENSOR.format(invalid_ha_topic_chars.sub('_', f"{container_entry['name']}_{field}_stats")), '', retain=True)
-    mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', '', retain=True)
+        mqtt_send(DISCOVERY_TOPIC_SENSOR.format(INVALID_HA_TOPIC_CHARS.sub('_', f"{container_entry['name']}_{field}_stats")), '', retain=True)
+    mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container_entry["name"]}/stats', '', retain=True)
 
 def stat_to_value(stat, container, matches):
-    """Converts a regex matches to two values, ie used and limit for memory
-    """
+    """Converts a regex matches to two values, i.e. used and limit for memory."""
     usedsymbol = ""
     limitsymbol = ""
     used = 0
     limit = 0
 
     if (matches is None):
-        if bDebugStat:
-            print("STATS %s: %s No matching regex, returning 0" % (stat, container))
+        stats_logger.debug("%s: %s No matching regex, returning 0", stat, container)
         used = 0
         limit = 0
         return used,limit
 
-    if bDebugStat:
-        print("STATS %s: %s Found matching regex, getting used symbol" % (stat, container))
+    stats_logger.debug("%s: %s Found matching regex, getting used symbol", stat, container)
     usedsymbol = matches.group('usedsymbol')
-    if bDebugStat:
-        print("STATS %s: %s Used Symbol %s" % (stat,container, usedsymbol))
+    stats_logger.debug("%s: %s Used Symbol %s", stat, container, usedsymbol)
     limitsymbol = matches.group('limitsymbol')
-    if bDebugStat:
-        print("STATS %s: %s Limit Symbol %s" % (stat,container, limitsymbol))
+    stats_logger.debug("%s: %s Limit Symbol %s", stat, container, limitsymbol)
     used = float(matches.group('used'))
     if (usedsymbol == "GiB"):
         used = used * 1024
@@ -264,8 +268,7 @@ def stat_to_value(stat, container, matches):
         used = used / 1024 / 1024
     if (usedsymbol == "B"):
         used = used / 1024 / 1024
-    if bDebugStat:
-        print("STATS %s: %s Used %f Mb" % (stat, container, used))
+    stats_logger.debug("%s: %s Used %f Mb", stat, container, used)
     limit = float(matches.group('limit'))
     if (limitsymbol == "GiB"):
         limit = limit * 1024
@@ -279,29 +282,231 @@ def stat_to_value(stat, container, matches):
         limit = limit / 1024
     if (limitsymbol == "B"):
         limit = limit / 1024 /1024
-    if bDebugStat:
-        print("STATS %s: %s Limit %f Mb" % (stat, container, limit))
-    if bDebugStat:
-        print("STATS %s: Stat for container %s is %f.1 MB from %f.1 MB" % (stat, container, used, limit))
+    stats_logger.debug("%s: %s Limit %f Mb", stat, container, limit)
+    stats_logger.debug("%s: Stat for container %s is %f.1f MB from %f.1f MB", stat, container, used, limit)
     return used,limit
+
+
+def remove_destroyed_containers():
+    """Remove any destroyed containers that have passed the TTL"""
+    for container, destroyed_at in pending_destroy_operations.copy().items():
+        if time() - destroyed_at > DESTROYED_CONTAINER_TTL:
+            main_logger.info('Removing container %s from MQTT.', container)
+            unregister_container(container)
+            del(pending_destroy_operations[container])
+
+def handle_events_queue():
+    """Check if any event is present in the queue and process it."""
+    event_line = ""
+
+    docker_events_qsize = docker_events.qsize()
+    try:
+        if bEvents:
+            event_line = docker_events.get(block=False)
+        if bDebug:
+            events_logger.info("Events queue length: %s", docker_events_qsize)
+    except queue.Empty:
+        # No data right now, just move along.
+        return
+
+    if bEvents and docker_events_qsize > 0:
+        try:
+            if event_line and len(event_line) > 0:
+                event = json.loads(event_line)
+                if event['status'] not in WATCHED_EVENTS:
+                    events_logger.info("Not a watched event: %s", event['status'])
+                    return
+
+                container = event['Actor']['Attributes']['name']
+                events_logger.debug("Have an event to process for Container name: %s", container)
+
+
+                if event['status'] == 'create':
+                    # Cancel any previous pending destroys and add this to known_event_containers.
+                    events_logger.info('Container %s has been created.', container)
+                    if container in pending_destroy_operations:
+                        events_logger.debug('Removing pending delete for %s.', container)
+                        del(pending_destroy_operations[container])
+
+                    register_container(
+                    {
+                        'name': container,
+                        'image': event['from'],
+                        'status': 'created',
+                        'state': 'off'
+                    })
+
+                elif event['status'] == 'destroy':
+                    # Add this container to pending_destroy_operations.
+                    events_logger.info('Container %s has been destroyed.', container)
+                    pending_destroy_operations[container] = time()
+                    known_event_containers[container]['status'] = 'destroyed'
+                    known_event_containers[container]['state'] = 'off'
+
+                elif event['status'] == 'die':
+                    events_logger.info('Container %s has stopped.', container)
+                    known_event_containers[container]['status'] = 'stopped'
+                    known_event_containers[container]['state'] = 'off'
+
+                elif event['status'] == 'pause':
+                    events_logger.info('Container %s has paused.', container)
+                    known_event_containers[container]['status'] = 'paused'
+                    known_event_containers[container]['state'] = 'off'
+
+                elif event['status'] == 'rename':
+                    old_name = event['Actor']['Attributes']['oldName']
+                    if old_name.startswith('/'):
+                        old_name = old_name[1:]
+                    events_logger.info('Container %s renamed to %s.', old_name, container)
+                    unregister_container({ 'name': old_name })
+                    register_container(
+                    {
+                        'name': container,
+                        'image': known_event_containers[old_name]['image'],
+                        'status': known_event_containers[old_name]['status'],
+                        'state': known_event_containers[old_name]['state']
+                    })
+                    del(known_event_containers[old_name])
+
+                elif event['status'] == 'start':
+                    events_logger.info('Container %s has started.', container)
+                    known_event_containers[container]['status'] = 'running'
+                    known_event_containers[container]['state'] = 'on'
+
+                elif event['status'] == 'unpause':
+                    events_logger.info('Container %s has unpaused.', container)
+                    known_event_containers[container]['status'] = 'running'
+                    known_event_containers[container]['state'] = 'on'
+                    
+                events_logger.debug("Sending mqtt payload")
+                mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/events', json.dumps(known_event_containers[container]), retain=True)
+        except Exception as ex:
+            events_logger.error("Error parsing line: %s", event_line)
+            events_logger.error("Error of parsed line: %s", str(ex))
+            print(ex)
+
+def handle_stats_queue():
+    """Check if any event is present in the queue and process it."""
+    stat_line = ""
+
+    docker_stats_qsize = docker_stats.qsize()
+    try:
+        if bStats:
+            stat_line = docker_stats.get(block=False)
+        stats_logger.info("Stats queue length: %s", docker_stats_qsize)
+    except queue.Empty:
+        # No data right now, just move along.
+        return
+
+        #################################
+        # Examples:
+        #{"BlockIO":"408MB / 0B","CPUPerc":"0.03%","Container":"9460abca90f1","ID":"9460abca90f1","MemPerc":"22.84%","MemUsage":"9.137MiB / 40MiB","Name":"d2mqtt","NetIO":"882kB / 1.19MB","PIDs":"11"}
+        #{"BlockIO":"--","CPUPerc":"--","Container":"b5ad8ff32144","ID":"b5ad8ff32144","MemPerc":"--","MemUsage":"-- / --","Name":"cameraevents","NetIO":"--","PIDs":"--"}
+        #################################
+
+    if bStats and docker_stats_qsize > 0:
+        try:
+            if stat_line:
+                stat_line = ''.join([c for c in stat_line if ord(c) > 31 or ord(c) == 9])
+                stat_line = stat_line.lstrip('[2J[H')
+                #print(':'.join(hex(ord(x))[2:] for x in stat_line))
+                stat = json.loads(stat_line)
+                #print("loaded json")
+                #print(stat)
+                container = stat['Name']
+                stats_logger.debug("Have a Stat to process for container: %s", container)
+
+                stats_logger.debug("Generating stat key (hashed stat line)")
+                statkey = hashlib.md5(json.dumps(stat).encode("utf-8")).hexdigest()
+                
+                if container not in known_stat_containers:
+                    known_stat_containers[container] = {}
+                    known_stat_containers[container]['name'] = container
+                    known_stat_containers[container]['key'] = ""
+                    known_stat_containers[container]['last'] = datetime.datetime(2020,1,1)
+                    last_stat_containers[container] = {}
+
+
+                stats_logger.debug("Current stat key: %s", statkey)
+                existingstatkey = known_stat_containers[container]['key']
+                stats_logger.debug("Last stat key: %s", existingstatkey)
+
+                checkdate = datetime.datetime.now()-datetime.timedelta(seconds=int(STATSRECORDSECONDS))
+                containerdate = known_stat_containers[container]['last']
+                stats_logger.debug("Compare dates %s %s", checkdate, containerdate)
+
+                if statkey != existingstatkey and containerdate <= checkdate:
+                    stats_logger.info("Processing %s stats", container)
+                    container_stats = {}
+                    container_stats['name'] = container
+                    container_stats['host'] = f'{DOCKER2MQTT_HOSTNAME}'
+                    known_stat_containers[container]['key'] = statkey
+                    known_stat_containers[container]['last'] = datetime.datetime.now()
+                    delta_seconds = (known_stat_containers[container]['last'] - containerdate).total_seconds()
+
+                    #"61.13MiB / 2.86GiB"
+                    #regex = r"(?P<used>\d+?\.?\d+?)(?P<usedsymbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limitsymbol>[MG]iB)"
+                    regex = r"(?P<used>.+?)(?P<usedsymbol>[kKMGT]?i?B)\s+\/\s(?P<limit>.+?)(?P<limitsymbol>[kKMGT]?i?B)"
+                    stats_logger.debug("Getting memory from \"%s\" with \"%s\"", stat['MemUsage'], regex)
+                    matches = re.match(regex, stat['MemUsage'], re.MULTILINE)
+                    memmbused, memmblimit = stat_to_value("MEMORY",container,matches)
+                    container_stats['memoryused'] = memmbused
+                    container_stats['memorylimit'] = memmblimit
+
+                    stats_logger.debug("Getting NETIO from \"%s\" with \"%s\"", stat['NetIO'], regex)
+                    matches = re.match(regex, stat['NetIO'], re.MULTILINE)
+                    netinput, netoutput = stat_to_value("NETIO", container, matches)
+                    container_stats['netinput'] = netinput
+                    container_stats['netoutput'] = netoutput
+                    container_stats['netinputrate'] = max(0, (netinput - last_stat_containers[container].get('netinput', 0))) / delta_seconds
+                    container_stats['netoutputrate'] = max(0, (netoutput - last_stat_containers[container].get('netoutput', 0))) / delta_seconds
+
+                    stats_logger.debug("Getting BLOCKIO from \"%s\" with \"%s\"", stat['BlockIO'], regex)
+                    matches = re.match(regex, stat['BlockIO'], re.MULTILINE)
+                    blockinput,blockoutput = stat_to_value("BLOCKIO",container,matches)
+                    container_stats['blockinput'] = blockinput
+                    container_stats['blockoutput'] = blockoutput
+                    container_stats['blockinputrate'] = max(0, (blockinput - last_stat_containers[container].get('blockinput', 0))) / delta_seconds
+                    container_stats['blockoutputrate'] = max(0, (blockoutput - last_stat_containers[container].get('blockoutput', 0))) / delta_seconds
+
+                    container_stats['memory'] = stat['MemUsage']
+                    container_stats['cpu'] = float(stat['CPUPerc'].strip('%'))
+                    container_stats['netio'] = stat['NetIO']
+                    stats_logger.debug("Printing container stats: %s", container_stats)
+                    stats_logger.debug("Sending mqtt payload")
+                    mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', json.dumps(container_stats), retain=False)
+                    last_stat_containers[container] = container_stats
+                else:
+                    stats_logger.debug("Not processing record as duplicate record or too young: %s ", container)
+
+        except IndexError as ex:
+            raise ex
+        except ValueError as ex:
+            raise ex
+        except ReferenceError as ex:
+            raise ex
+        except TypeError as ex:
+            raise ex
+        except Exception as ex:
+            stats_logger.error("Error parsing line: %s", stat_line)
+            stats_logger.error("Error of parsed line: %s", str(ex))
+            stats_logger.info(':'.join(hex(ord(x))[2:] for x in stat_line))
+            print(ex)
 
 
 if __name__ == '__main__':
 
     try:
-        print("Debug: %s" % DEBUG)
-        print("Debug Stats: %s" % DEBUG)
-        print("STATS: %s" % STATS)
-        print("EVENTS: %s" % EVENTS)
-        if (DEBUG == '1'):
-            bDebug = True
-        if (EVENTS == '1'):
+        print("Log Level: {}".format(LOG_LEVEL))
+        if (EVENTS):
             bEvents = True
-        if (STATS == '1'):
+        if (STATS):
             bStats = True
-        if (DEBUGSTAT == '1'):
-            bDebugStat = True
-        
+
+        main_logger.info("Events enabled: %d", bEvents)
+        main_logger.info("Stats enabled: %d", bStats)
+
+        # Get docker version
         docker_version = get_docker_version()
 
         # Setup MQTT
@@ -312,8 +517,8 @@ if __name__ == '__main__':
         mqtt.loop_start()
         mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/status', 'online', retain=True)
 
-        # Register containers with HA
-        docker_ps = run(docker_ps_cmd, stdout=PIPE, text=True)
+        # Go through all existing containers and register them with HA
+        docker_ps = run(DOCKER_PS_CMD, stdout=PIPE, text=True)
         for line in docker_ps.stdout.splitlines():
             container_status = json.loads(line)
 
@@ -335,15 +540,13 @@ if __name__ == '__main__':
                     'status': status_str,
                     'state': state_str
                 })
-            # Todo: register stats
 
-        numcontainers = 0
         started = False
         # Start the docker events thread
         docker_events = queue.Queue(maxsize=MAX_QUEUE_SIZE)
         if bEvents:
-            print("Starting EVENTS thread")
-            docker_events_t = Thread(target=readline_thread, daemon=True)
+            logging.info("Starting Events thread")
+            docker_events_t = Thread(target=readline_events_thread, daemon=True, name="Events")
             docker_events_t.start()
             started = True
 
@@ -351,267 +554,35 @@ if __name__ == '__main__':
         docker_stats = queue.Queue(maxsize=MAX_QUEUE_SIZE)
         if (bStats):
             started = True
-            print("Starting STATS thread")
-            docker_stats_t = Thread(target=readline_stats_thread, daemon=True)
+            logging.info("Starting Stats thread")
+            docker_stats_t = Thread(target=readline_stats_thread, daemon=True, name="Stats")
             docker_stats_t.start()
-            if bDebugStat:
-                print("Starting stats started")
 
         if started is False:
-            print("Nothing started")
-            sys.exit(0)
-
-        line = ""
-        linestats = ""
-
+            logging.critical("Nothing started, check your config!")
+            sys.exit(1)
 
         # Loop and wait for new events
         while True:
-            # Remove any destroyed containers that have passed the TTL
-            for container, destroyed_at in pending_destroy_operations.copy().items():
-                if time() - destroyed_at > DESTROYED_CONTAINER_TTL:
-                    print(f'Removing container {container} from MQTT.')
-                    unregister_container(container)
-                    del(pending_destroy_operations[container])
+            remove_destroyed_containers()
 
-            # Collect and process an event from `docker events`
-            docker_events_qsize = docker_events.qsize()
-            try:
-                if bEvents:
-                    line = docker_events.get(block=False)
-                if bDebug:
-                    print("Events length: %s" % docker_events_qsize)
-                if bEvents and not docker_events_t.is_alive:
-                    print("Starting EVENTS thread")
-                    docker_events_t.start()
-            except queue.Empty:
-                # No data right now, just move along.
-                #if bDebug: print ("Line continue")
-                pass
+            handle_events_queue()
+
+            handle_stats_queue()
+
+            if bEvents and not docker_events_t.is_alive:
+                main_logger.warning("Restarting events thread")
+                docker_events_t.start()
             
-            # Collect and process an event from `docker stats`
-            #if bDebug: print("Looking for line stats")
-            docker_stats_qsize = docker_stats.qsize()
-            try:
-                if bStats:
-                    linestats = docker_stats.get(block=False)
-                #if bDebug: print(linestats)
-                if bDebugStat:
-                    print("Stats length: %s" % docker_stats_qsize)
-                if bStats and not docker_stats_t.is_alive:
-                    print("Starting STATS thread")
-                    docker_stats_t.start()
-            except queue.Empty:
-                # No data right now, just move along.
-                pass
-
-            if bEvents and docker_events_qsize > 0:
-                try:
-                    if line and len(line) > 0:
-                        event = json.loads(line)
-                        #if bDebug: print(event)
-                        if event['status'] not in WATCHED_EVENTS:
-                            print("EVENT: Not a watched event: %s" % event['status'])
-                            continue
-
-                        container = event['Actor']['Attributes']['name']
-                        if bDebug:
-                            print ("EVENT:Have an event to process for Container name: " + container)
-
-
-                        if event['status'] == 'create':
-                            # Cancel any previous pending destroys and add this to known_event_containers.
-                            if bDebug:
-                                print(f'Container {container} has been created.')
-                            if container in pending_destroy_operations:
-                                if bDebug:
-                                    print(f'Removing pending delete for {container}.')
-                                del(pending_destroy_operations[container])
-
-                            register_container(
-                            {
-                                'name': container,
-                                'image': event['from'],
-                                'status': 'created',
-                                'state': 'off'
-                            })
-
-                        elif event['status'] == 'destroy':
-                            # Add this container to pending_destroy_operations.
-                            if bDebug:
-                                print(f'Container {container} has been destroyed.')
-                            pending_destroy_operations[container] = time()
-                            known_event_containers[container]['status'] = 'destroyed'
-                            known_event_containers[container]['state'] = 'off'
-
-                        elif event['status'] == 'die':
-                            if bDebug:
-                                print(f'Container {container} has stopped.')
-                            known_event_containers[container]['status'] = 'stopped'
-                            known_event_containers[container]['state'] = 'off'
-
-                        elif event['status'] == 'pause':
-                            if bDebug:
-                                print(f'Container {container} has paused.')
-                            known_event_containers[container]['status'] = 'paused'
-                            known_event_containers[container]['state'] = 'off'
-
-                        elif event['status'] == 'rename':
-                            old_name = event['Actor']['Attributes']['oldName']
-                            if old_name.startswith('/'):
-                                old_name = old_name[1:]
-                            if bDebug:
-                                print(f'Container {old_name} renamed to {container}.')
-                            unregister_container({ 'name': old_name })
-                            register_container(
-                            {
-                                'name': container,
-                                'image': known_event_containers[old_name]['image'],
-                                'status': known_event_containers[old_name]['status'],
-                                'state': known_event_containers[old_name]['state']
-                            })
-                            del(known_event_containers[old_name])
-
-                        elif event['status'] == 'start':
-                            if bDebug:
-                                print(f'Container {container} has started.')
-                            known_event_containers[container]['status'] = 'running'
-                            known_event_containers[container]['state'] = 'on'
-
-                        elif event['status'] == 'unpause':
-                            if bDebug:
-                                print(f'Container {container} has unpaused.')
-                            known_event_containers[container]['status'] = 'running'
-                            known_event_containers[container]['state'] = 'on'
-                            
-                        if bDebug:
-                            print("EVENT: Sending mqtt payload")
-                        mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/events', json.dumps(known_event_containers[container]), retain=True)
-                except Exception as eventEx:
-                    print("EVENTS: error parsing line: " + str(eventEx))
-                    print("EVENTS: ERROR parsing line: " + line)
-            #if docker_events.qsize() > 0:
-
-            #{"BlockIO":"408MB / 0B","CPUPerc":"0.03%","Container":"9460abca90f1","ID":"9460abca90f1","MemPerc":"22.84%","MemUsage":"9.137MiB / 40MiB","Name":"d2mqtt","NetIO":"882kB / 1.19MB","PIDs":"11"}
-            #{"BlockIO":"--","CPUPerc":"--","Container":"b5ad8ff32144","ID":"b5ad8ff32144","MemPerc":"--","MemUsage":"-- / --","Name":"cameraevents","NetIO":"--","PIDs":"--"}
-            if bStats and docker_stats_qsize > 0:
-                #if bDebug: print("STATS: loading line as JSON: " + linestats)
-                if linestats:
-                    linestats = ''.join([c for c in linestats if ord(c) > 31 or ord(c) == 9])
-                    linestats = linestats.lstrip('[2J[H')
-                    #print(':'.join(hex(ord(x))[2:] for x in linestats))
-                    try:
-                        if bDebugStat:
-                            print("Stats length: %s" % docker_stats_qsize)
-                        stat = json.loads(linestats)
-                        #print("STATS: loaded json")
-                        #print(stat)
-                        container = stat['Name']
-                        if bDebug:
-                            print ("STATS: Have a Stat to process for Container name: " + container)
-
-                        if bDebugStat:
-                            print("STAT: GETTING STAT KEY")
-                        statkey = hashlib.md5(json.dumps(stat).encode("utf-8")).hexdigest()
-                        
-                        if container not in known_stat_containers:
-                            known_stat_containers[container] = {}
-                            known_stat_containers[container]['name'] = container
-                            known_stat_containers[container]['key'] = ""
-                            known_stat_containers[container]['last'] = datetime.datetime(2020,1,1)
-                            last_stat_containers[container] = {}
-
-
-                        if bDebugStat:
-                            print("STAT: STATKEY: %s" % statkey)
-                        existingstatkey = known_stat_containers[container]['key']
-                        if bDebugStat:
-                            print("STAT: OLDSTAT: %s" % existingstatkey)
-
-                        checkdate = datetime.datetime.now()-datetime.timedelta(seconds=int(STATSRECORDSECONDS))
-                        containerdate = known_stat_containers[container]['last']
-                        if bDebugStat:
-                            print("STATS: dates %s %s" % (checkdate, containerdate))
-
-                        if statkey != existingstatkey and containerdate <= checkdate:
-                            if bDebugStat:
-                                print("STAT: Processing %s stats" % container)
-                            container_stats = {}
-                            container_stats['name'] = container
-                            container_stats['host'] = f'{DOCKER2MQTT_HOSTNAME}'
-                            known_stat_containers[container]['key'] = statkey
-                            known_stat_containers[container]['last'] = datetime.datetime.now()
-                            delta_seconds = (known_stat_containers[container]['last'] - containerdate).total_seconds()
-
-                            #"61.13MiB / 2.86GiB"
-                            #regex = r"(?P<used>\d+?\.?\d+?)(?P<usedsymbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limitsymbol>[MG]iB)"
-                            regex = r"(?P<used>.+?)(?P<usedsymbol>[kKMGT]?i?B)\s+\/\s(?P<limit>.+?)(?P<limitsymbol>[kKMGT]?i?B)"
-                            if bDebugStat:
-                                print("STATS: Getting Memory from \"%s\" with \"%s\"" % (stat['MemUsage'], regex))
-                            matches = re.match(regex, stat['MemUsage'], re.MULTILINE)
-                            if bDebugStat:
-                                print("STATS after regex parse")
-                            memmbused, memmblimit = stat_to_value("MEMORY",container,matches)
-                            container_stats['memoryused'] = memmbused
-                            container_stats['memorylimit'] = memmblimit
-
-                            if bDebugStat:
-                                print("STATS: Getting NETIO from \"%s\" with \"%s\"" % (stat['NetIO'], regex))
-                            matches = re.match(regex, stat['NetIO'], re.MULTILINE)
-                            netinput, netoutput = stat_to_value("NETIO",container,matches)
-                            container_stats['netinput'] = netinput
-                            container_stats['netoutput'] = netoutput
-                            container_stats['netinputrate'] = max(0, (netinput - last_stat_containers[container].get('netinput', 0))) / delta_seconds
-                            container_stats['netoutputrate'] = max(0, (netoutput - last_stat_containers[container].get('netoutput', 0))) / delta_seconds
-
-                            if bDebugStat:
-                                print("STATS: Getting BLOCKIO from \"%s\" with \"%s\"" % (stat['BlockIO'], regex))
-                            matches = re.match(regex, stat['BlockIO'], re.MULTILINE)
-                            blockinput,blockoutput = stat_to_value("BLOCKIO",container,matches)
-                            container_stats['blockinput'] = blockinput
-                            container_stats['blockoutput'] = blockoutput
-                            container_stats['blockinputrate'] = max(0, (blockinput - last_stat_containers[container].get('blockinput', 0))) / delta_seconds
-                            container_stats['blockoutputrate'] = max(0, (blockoutput - last_stat_containers[container].get('blockoutput', 0))) / delta_seconds
-
-                            container_stats['memory'] = stat['MemUsage']
-                            container_stats['cpu'] = float(stat['CPUPerc'].strip('%'))
-                            container_stats['netio'] = stat['NetIO']
-                            if bDebugStat:
-                                print("STATS: printing container")
-                            if bDebugStat:
-                                print(container_stats)
-                            if bDebugStat:
-                                print("STATS: Sending mqtt payload")
-                            mqtt_send(f'{MQTT_TOPIC_PREFIX}/{DOCKER2MQTT_HOSTNAME}/{container}/stats', json.dumps(container_stats), retain=False)
-                            last_stat_containers[container] = container_stats
-                        else:
-                            if bDebugStat:
-                                print ("STATS: Not processing record as duplicate record or too young: %s " % container)
-                        #if stat not in known_event_containers[container]['json']:
-
-                    except IndexError as ex:
-                        raise ex
-                    except ValueError as ex:
-                        raise ex
-                    except ReferenceError as ex:
-                        raise ex
-                    except TypeError as ex:
-                        raise ex
-                    except Exception as ex:
-                        print("STATS: error parsing linestats: " + str(ex))
-                        print("STATS: ERROR parsing linestats: " + linestats)
-                        print(':'.join(hex(ord(x))[2:] for x in linestats))
-                        
-                        pass
-
-
-                #if bDebug: print ("STATS: %s" % linestats)
+            if bStats and not docker_stats_t.is_alive:
+                main_logger.warning("Restarting stats thread")
+                docker_stats_t.start()
+            
             # Calculate next iteration between (~0.2s and 0.001s)
             sleep_time = 0.001 + 0.2 / MAX_QUEUE_SIZE * (MAX_QUEUE_SIZE - max(docker_events.qsize(), docker_stats.qsize()))
-            if bDebug:
-                print ("SLEEP TIME: %fs" % sleep_time)
+            main_logger.debug("Sleep for %f.5fs until next iteration", sleep_time)
             sleep(sleep_time)
 
     except Exception as ex:
+        main_logger.error("Error processing: %s", str(ex))
         print(ex)
-        print("Error processing: " + str(ex))

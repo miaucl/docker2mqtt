@@ -38,8 +38,7 @@ You can use environment variables to control the behavior.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEBUG` | | Set to `1` to enable additional debug logging. |
-| `DEBUGSTAT` | | Set to `1` to enable additional debug logging for stats. |
+| `LOG_LEVEL` | INFO | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
 | `DESTROYED_CONTAINER_TTL` | 86400 | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
 | `DOCKER2MQTT_HOSTNAME` | Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
 | `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
