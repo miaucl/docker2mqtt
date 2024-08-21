@@ -1,4 +1,4 @@
-FROM python:3.12
+FROM python:3.12-slim
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
@@ -13,7 +13,7 @@ RUN apt update && \
         $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
         tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt update && \
-    apt-get install --no-install-recommends -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
+    apt-get install --no-install-recommends -y docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
 
