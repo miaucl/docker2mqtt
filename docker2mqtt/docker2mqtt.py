@@ -501,7 +501,7 @@ class Docker2Mqtt:
         try:
             if self.b_events:
                 event_line = self.docker_events.get(block=False)
-            events_logger.info("Events queue length: %s", docker_events_qsize)
+            events_logger.debug("Events queue length: %s", docker_events_qsize)
         except Empty:
             # No data right now, just move along.
             return
@@ -604,7 +604,7 @@ class Docker2Mqtt:
         try:
             if self.b_stats:
                 stat_line = self.docker_stats.get(block=False)
-            stats_logger.info("Stats queue length: %s", docker_stats_qsize)
+            stats_logger.debug("Stats queue length: %s", docker_stats_qsize)
         except Empty:
             # No data right now, just move along.
             return
