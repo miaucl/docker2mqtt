@@ -147,7 +147,7 @@ class Docker2Mqtt:
 
         # Setup MQTT
         self.mqtt = paho.mqtt.client.Client(
-            paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore
+            callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore
             client_id=self.cfg["mqtt_client_id"],
         )
         self.mqtt.username_pw_set(
