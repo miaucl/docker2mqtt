@@ -15,4 +15,4 @@ jobs:
           python-version: ${{ env.DEFAULT_PYTHON }}
           check-latest: true
       - run: pip install -r requirements_dev.txt
-      - run: mypy src
+      - run: mypy docker2mqtt

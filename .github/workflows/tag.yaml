@@ -23,7 +23,7 @@ jobs:
       - name: Extract version from file
         id: extract_version
         run: |
-          VERSION=$(grep 'version' ./setup.cfg | sed -E 's/version = (.*)/\1/')
+          VERSION=$(grep 'version' ./setup.cfg | sed -E 's/version = (.*)/\1/' | tr -d '\n')
           echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Compare versions
