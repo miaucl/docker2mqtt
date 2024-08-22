@@ -1,2 +1,2 @@
 #!/bin/bash
-python3 -i -m src.__main__
+python3 -i -m docker2mqtt.__main__

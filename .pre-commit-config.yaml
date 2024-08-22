@@ -20,4 +20,4 @@ repos:
         language: script
         types: [python]
         require_serial: true
-        files: ^(src)/.+\.py$
+        files: ^(docker2mqtt)/.+\.py$

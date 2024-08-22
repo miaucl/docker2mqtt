@@ -32,7 +32,7 @@ COPY requirements.txt /
 RUN pip install -r requirements.txt --break-system-packages
 
 # Copy files into place
-COPY src /src
+COPY docker2mqtt /docker2mqtt
 
 # Copy entrypoint
 COPY entrypoint.sh /
