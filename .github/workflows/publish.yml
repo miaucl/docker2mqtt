@@ -1,10 +1,6 @@
 name: Publish Python 🐍 distribution 📦 to PyPI
 
-on:
-  push:
-    tags:
-    - '*'
-    - '!*/*'
+on: 'push'
 
 jobs:
   build:
@@ -30,12 +26,40 @@ jobs:
       with:
         name: python-package-distributions
         path: dist/
+  check_version:
+    name: Check the version
+    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract tag version
+        id: extract_tag
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+
+      - name: Extract version from file
+        id: extract_version
+        run: |
+          VERSION=$(grep 'version' ./setup.cfg | sed -E 's/version = (.*)[[:space:]]/\1/')
+          echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Compare versions
+        run: |
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match file version ($FILE_VERSION)."
+            exit 1
+          else
+            echo "Tag version ($TAG_VERSION) matches file version ($FILE_VERSION)."
+          fi    
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
-    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
-    needs:
-    - build
+    needs: check_version
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -50,12 +74,48 @@ jobs:
         path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+  publish-to-ghcr:
+    name: Publish Docker Image to Container Registry
+    needs: check_version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v4
+    - name: Docker meta
+      id: docker_meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/miaucl/docker2mqtt
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: linux/amd64,linux/arm64
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: linux/amd64,linux/arm64
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: miaucl
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Push to GitHub Packages
+      uses: docker/build-push-action@v5
+      with:
+        file: Dockerfile
+        push: true
+        tags: ${{ steps.docker_meta.outputs.tags }}
+        labels: ${{ steps.docker_meta.outputs.labels }}
+        platforms: linux/amd64,linux/arm64    
   github-release:
     name: >-
       Sign the Python 🐍 distribution 📦 with Sigstore
       and upload them to GitHub Release
     needs:
     - publish-to-pypi
+    - publish-to-ghcr
     runs-on: ubuntu-latest
 
     permissions:
