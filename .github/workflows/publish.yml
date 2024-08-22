@@ -1,4 +1,4 @@
-name: Publish Python 🐍 distribution 📦 to PyPI
+name: Publish
 
 on: 'push'
 
@@ -43,15 +43,24 @@ jobs:
           echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
 
       - name: Extract version from file
-        id: extract_version
+        id: extract_file_version
+        run: |
+          VERSION=$(grep '__VERSION__' ./docker2mqtt/__init__.py | sed -E 's/version = "(.*)"/\1/')
+          echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Extract version from setup config
+        id: extract_config_version
         run: |
           VERSION=$(grep 'version' ./setup.cfg | sed -E 's/version = (.*)[[:space:]]/\1/')
-          echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "CONFIG_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Compare versions
         run: |
           if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match file version ($FILE_VERSION)."
+            exit 1
+          elif  [ "$TAG_VERSION" != "$CONFIG_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match config version ($CONFIG_VERSION)."
             exit 1
           else
             echo "Tag version ($TAG_VERSION) matches file version ($FILE_VERSION)."

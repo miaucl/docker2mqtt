@@ -17,6 +17,7 @@ from typing import Any, Dict, Tuple
 
 import paho.mqtt.client
 
+from . import __VERSION__
 from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
@@ -51,7 +52,7 @@ from .type_definitions import (
 DEFAULT_CONFIG = Docker2MqttConfig(
     {
         "log_level": LOG_LEVEL_DEFAULT,
-        "destroyedContainerTTL": DESTROYED_CONTAINER_TTL_DEFAULT,
+        "destroyed_container_ttl": DESTROYED_CONTAINER_TTL_DEFAULT,
         "homeassistant_prefix": HOMEASSISTANT_PREFIX_DEFAULT,
         "docker2mqtt_hostname": "docker2mqtt-host",
         "mqtt_client_id": MQTT_CLIENT_ID_DEFAULT,
@@ -64,7 +65,7 @@ DEFAULT_CONFIG = Docker2MqttConfig(
         "mqtt_qos": MQTT_QOS_DEFAULT,
         "enable_events": EVENTS_DEFAULT,
         "enable_stats": STATS_DEFAULT,
-        "stars_recording_seconds": STATS_RECORD_SECONDS_DEFAULT,
+        "stats_record_seconds": STATS_RECORD_SECONDS_DEFAULT,
     }
 )
 
@@ -82,7 +83,7 @@ class Docker2Mqtt:
     """docker2mqtt class."""
 
     # Version
-    __version__ = "2.0.0-rc.0"
+    version = __VERSION__
 
     cfg: Docker2MqttConfig
 
@@ -163,6 +164,12 @@ class Docker2Mqtt:
         )
         self.mqtt.loop_start()
         self.mqtt_send(self.status_topic, "online", retain=True)
+        self.mqtt.publish(
+            self.version_topic,
+            self.version,
+            qos=self.cfg["mqtt_qos"],
+            retain=True,
+        )
 
         started = False
         if self.b_events:
@@ -230,7 +237,7 @@ class Docker2Mqtt:
         )
         self.mqtt.publish(
             self.version_topic,
-            self.__version__,
+            self.version,
             qos=self.cfg["mqtt_qos"],
             retain=True,
         )
@@ -481,7 +488,7 @@ class Docker2Mqtt:
     def remove_destroyed_containers(self) -> None:
         """Remove any destroyed containers that have passed the TTL."""
         for container, destroyed_at in self.pending_destroy_operations.copy().items():
-            if time() - destroyed_at > self.cfg["destroyedContainerTTL"]:
+            if time() - destroyed_at > self.cfg["destroyed_container_ttl"]:
                 main_logger.info("Removing container %s from MQTT.", container)
                 self.unregister_container(container)
                 del self.pending_destroy_operations[container]
@@ -639,7 +646,7 @@ class Docker2Mqtt:
                     stats_logger.debug("Last stat key: %s", existing_stat_key)
 
                     check_date = datetime.datetime.now() - datetime.timedelta(
-                        seconds=self.cfg["stars_recording_seconds"]
+                        seconds=self.cfg["stats_record_seconds"]
                     )
                     container_date = self.known_stat_containers[container]["last"]
                     stats_logger.debug(

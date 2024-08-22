@@ -36,7 +36,7 @@ if __name__ == "__main__":
     cfg = Docker2MqttConfig(
         {
             "log_level": environ.get("LOG_LEVEL", LOG_LEVEL_DEFAULT),
-            "destroyedContainerTTL": int(
+            "destroyed_container_ttl": int(
                 environ.get("DESTROYED_CONTAINER_TTL", DESTROYED_CONTAINER_TTL_DEFAULT)
             ),
             "homeassistant_prefix": environ.get(
@@ -55,7 +55,7 @@ if __name__ == "__main__":
             "mqtt_qos": int(environ.get("MQTT_QOS", MQTT_QOS_DEFAULT)),
             "enable_events": bool(environ.get("EVENTS", EVENTS_DEFAULT)),
             "enable_stats": bool(environ.get("STATS", STATS_DEFAULT)),
-            "stars_recording_seconds": int(
+            "stats_record_seconds": int(
                 environ.get("STATS_RECORD_SECONDS", STATS_RECORD_SECONDS_DEFAULT)
             ),
         }

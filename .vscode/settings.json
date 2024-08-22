@@ -10,6 +10,8 @@
     "levelname",
     "memorylimit",
     "memoryused",
+    "miaucl",
+    "mosquitto",
     "mqtt",
     "mypy",
     "netinput",
@@ -20,6 +22,7 @@
     "paho",
     "Perc",
     "pyenv",
+    "pypi",
     "venv",
     "virtualenv"
   ],

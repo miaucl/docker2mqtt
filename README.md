@@ -1,8 +1,47 @@
 # docker2mqtt - Deliver docker status information over MQTT
 
+[![Mypy](https://github.com/miaucl/docker2mqtt/actions/workflows/mypy.yaml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/mypy.yaml)
+[![Ruff](https://github.com/miaucl/docker2mqtt/actions/workflows/ruff.yml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/ruff.yml)
+[![Publish](https://github.com/miaucl/docker2mqtt/actions/workflows/publish.yml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/publish.yml)
+
 This program uses `docker events` to watch for changes in your docker containers, and delivers current status to MQTT. It will also publish Home Assistant MQTT Discovery messages so that binary sensors automatically show up in Home Assistant.
 
 ## Running
+
+It available as python package on pypi or as a docker image.
+
+### Pypi package
+
+[![PyPI version](https://badge.fury.io/py/docker2mqtt.svg)](https://badge.fury.io/py/docker2mqtt)
+
+`pip install docker2mqtt`
+
+Usage
+
+```python
+from docker2mqtt import Docker2Mqtt, DEFAULT_CONFIG
+
+cfg = Docker2MqttConfig({ 
+  **DEFAULT_CONFIG,
+  "host": "mosquitto",
+  "enable_events": True
+})
+
+try:
+  docker2mqtt = Docker2Mqtt(cfg)
+  docker2mqtt.loop_busy()
+
+except Exception as ex:
+  # Do something
+```
+
+### Docker image
+
+[![1] ![2] ![3]](https://github.com/eggplants/ghcr-badge/pkgs/container/ghcr-badge)
+
+[1]: <https://ghcr-badge.egpl.dev/miaucl/docker2mqtt/tags?color=%23B8860B&ignore=latest&n=1&label=image&trim=>
+[2]: <https://ghcr-badge.egpl.dev/miaucl/docker2mqtt/tags?color=%2344cc11&ignore=latest,*-rc*&n=3&label=image&trim=>
+[3]: <https://ghcr-badge.egpl.dev/miaucl/docker2mqtt/size?color=%231E90FF&tag=latest&label=image+size&trim=>
 
 Use docker to launch this. Please note that you must give it access to your docker socket, which is typically located at `/var/run/docker.sock`. A typical invocation is:
 
@@ -16,18 +55,10 @@ services:
     container_name: docker2mqtt
     image: ghcr.io/miaucl/docker2mqtt
     environment:
-      - LOG_LEVEL=DEBUG
       - DOCKER2MQTT_HOSTNAME=my_docker_host
-      - HOMEASSISTANT_PREFIX=homeassistant
-      - MQTT_CLIENT_ID=docker2mqtt
       - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
       - MQTT_USER=username
       - MQTT_PASSWD=password
-      - MQTT_TIMEOUT=30
-      - MQTT_TOPIC_PREFIX=docker
-      - MQTT_QOS=1
-      - DESTROYED_CONTAINER_TTL=86400
       - EVENTS=1
       - STATS=1
     restart: unless-stopped
@@ -35,27 +66,27 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 ```
 
-## Configuration
+## Default Configuration
 
 You can use environment variables to control the behavior.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LOG_LEVEL` | INFO | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
-| `DOCKER2MQTT_HOSTNAME` | Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
-| `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
-| `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
-| `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
-| `MQTT_PORT` | `1883` | The port on the broker to connect to. |
-| `MQTT_USER` | `` | The user to send to the MQTT broker. Leave unset to disable authentication. |
-| `MQTT_PASSWD` | `` | The password to send to the MQTT broker. Leave unset to disable authentication. |
-| `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
-| `MQTT_TOPIC_PREFIX` | `ping` | The MQTT topic prefix. With the default data will be published to `ping/<hostname>`. |
-| `MQTT_QOS` | `1` | The MQTT QOS level |
-| `DESTROYED_CONTAINER_TTL` | 86400 | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
-| `STATS_RECORD_SECONDS` | 30 | The number of seconds to record state and make an average |
-| `EVENTS` | `1` | 1 Or 0 for processing events |
-| `STATS` | `1` | 1 Or 0 for processing statistics |
+| Config | Env Variable | Default | Description |
+|--------|--------------|---------|-------------|
+| `log_level`| `LOG_LEVEL` | `INFO` | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
+| `docker2mqtt_hostname`| `DOCKER2MQTT_HOSTNAME` | docker2mqtt Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
+| `homeassistant_prefix`| `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
+| `mqtt_client_id`| `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
+| `mqtt_host`| `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
+| `mqtt_port`| `MQTT_PORT` | `1883` | The port on the broker to connect to. |
+| `mqtt_user`| `MQTT_USER` | `` | The user to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_password`| `MQTT_PASSWD` | `` | The password to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_timeout`| `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
+| `mqtt_topic_prefix`| `MQTT_TOPIC_PREFIX` | `ping` | The MQTT topic prefix. With the default data will be published to `ping/<hostname>`. |
+| `mqtt_qos`| `MQTT_QOS` | `1` | The MQTT QOS level |
+| `destroyed_container_ttl`| `DESTROYED_CONTAINER_TTL` | `86400` | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
+| `stats_record_seconds`| `STATS_RECORD_SECONDS` | `30` | The number of seconds to record state and make an average |
+| `enable_events`| `EVENTS` | `0` | 1 Or 0 for processing events |
+| `enable_stats`| `STATS` | `0` | 1 Or 0 for processing statistics |
 
 ## Consuming The Data
 

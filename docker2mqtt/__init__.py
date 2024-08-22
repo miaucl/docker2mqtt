@@ -1,5 +1,8 @@
 """docker2mqtt lib."""
 
+__VERSION__ = "2.0.0-rc.0"
+
+
 from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,

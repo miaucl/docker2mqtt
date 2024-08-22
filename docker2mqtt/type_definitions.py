@@ -14,7 +14,7 @@ class Docker2MqttConfig(TypedDict):
     """A config object."""
 
     log_level: str
-    destroyedContainerTTL: int
+    destroyed_container_ttl: int
     homeassistant_prefix: str
     docker2mqtt_hostname: str
     mqtt_client_id: str
@@ -27,7 +27,7 @@ class Docker2MqttConfig(TypedDict):
     mqtt_qos: int
     enable_events: bool
     enable_stats: bool
-    stars_recording_seconds: int
+    stats_record_seconds: int
 
 
 class ContainerEvent(TypedDict):
