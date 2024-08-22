@@ -2,6 +2,7 @@
 
 [![Mypy](https://github.com/miaucl/docker2mqtt/actions/workflows/mypy.yaml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/mypy.yaml)
 [![Ruff](https://github.com/miaucl/docker2mqtt/actions/workflows/ruff.yml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/ruff.yml)
+[![Markdownlint](https://github.com/miaucl/docker2mqtt/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/markdownlint.yml)
 [![Publish](https://github.com/miaucl/docker2mqtt/actions/workflows/publish.yml/badge.svg)](https://github.com/miaucl/docker2mqtt/actions/workflows/publish.yml)
 
 This program uses `docker events` to watch for changes in your docker containers, and delivers current status to MQTT. It will also publish Home Assistant MQTT Discovery messages so that binary sensors automatically show up in Home Assistant.
