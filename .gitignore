@@ -1,1 +1,4 @@
 docker-compose.dev.yaml
+.venv
+.mypy_cache
+.ruff_cache

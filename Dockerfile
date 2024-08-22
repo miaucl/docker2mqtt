@@ -22,16 +22,23 @@ RUN apt update && \
     apt install --no-install-recommends -y python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
+# Workdir
+WORKDIR /
+
 # Copy files into place
 COPY requirements.txt /
 
+# Install dependencies
 RUN pip install -r requirements.txt --break-system-packages
 
 # Copy files into place
-COPY docker2mqtt /
+COPY src /src
+
+# Copy entrypoint
+COPY entrypoint.sh /
 
 # Pass correct stop signal to script
 STOPSIGNAL SIGINT
 
-# Set the entrypoint
-ENTRYPOINT ["/docker2mqtt"]
+# Set the cmd
+ENTRYPOINT ["/entrypoint.sh"]

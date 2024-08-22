@@ -59,34 +59,9 @@ You can use environment variables to control the behavior.
 
 ## Consuming The Data
 
-Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and takes the following form:
+Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and its type can be inspected in [types.py](./src/types.py).
 
-```json
-{
-  "name": "<Container Name>",
-  "image": "<Container Image>",
-  "status": "<'paused', 'running', or 'stopped'>",
-  "state": "<'on' or 'off'>"
-}
-```
-
-Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so and takes the following form:
-
-```json
-{
-  "name": "<name>", 
-  "host": "<host>", 
-  "memoryused": 53.11,
-  "memorylimit": 15605.76, 
-  "netinput": 1.23, 
-  "netoutput": 40.5, 
-  "blockinput": 124.0, 
-  "blockoutput": 0.0, 
-  "memory": "53.11MiB / 15.24GiB", 
-  "cpu": 0.0, 
-  "netio": "1.23MB / 40.5MB"
-}
-```
+Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so can be inspected in [types.py](./src/types.py).
 
 ## Home Assistant
 
@@ -94,6 +69,30 @@ After you start the service binary sensors should show up in Home Assistant imme
 
 ![Screenshot of Home Assistant sensor showing status and attributes.](ha_screenshot.png)
 
-### Credits
+## Dev
+
+Setup the dev environment using VSCode, it is highly recommended.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements_dev.txt
+```
+
+Install [pre-commit](https://pre-commit.com)
+
+```bash
+pre-commit install
+
+# Run the commit hooks manually
+pre-commit run --all-files
+```
+
+Following VSCode integrations may be helpful:
+
+* [ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
+* [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
+
+## Credits
 
 This is a detached fork from the repo <https://github.com/skullydazed/docker2mqtt>, which does not seem to get evolved anymore.
