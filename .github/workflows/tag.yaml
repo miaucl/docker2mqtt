@@ -23,7 +23,7 @@ jobs:
       - name: Extract version from file
         id: extract_version
         run: |
-          VERSION=$(grep '__version__' ./docker2mqtt | sed -E 's/__version__ = "(.*)"/\1/')
+          VERSION=$(grep 'version' ./setup.cfg | sed -E 's/version = "(.*)"/\1/')
           echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Compare versions
@@ -69,26 +69,3 @@ jobs:
         tags: ${{ steps.docker_meta.outputs.tags }}
         labels: ${{ steps.docker_meta.outputs.labels }}
         platforms: linux/amd64,linux/arm64
-
-  release:
-    name: Tag/Release
-    needs: publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-    - name: Get version
-      id: version
-      run: |
-        TAG_VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
-    - name: Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.ref }}
-        name: Release ${{ steps.version.outputs.version }}
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
