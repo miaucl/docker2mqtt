@@ -13,7 +13,7 @@ It available as python package on pypi or as a docker image.
 
 ### Pypi package
 
-[![PyPI version](https://badge.fury.io/py/docker2mqtt.svg)](https://badge.fury.io/py/docker2mqtt)
+[![PyPI version](https://badge.fury.io/py/docker2mqtt.svg)](https://pypi.org/p/docker2mqtt)
 
 `pip install docker2mqtt`
 
