@@ -39,6 +39,7 @@ from .const import (
     STATS_REGISTRATION_ENTRIES,
     WATCHED_EVENTS,
 )
+from .exceptions import Docker2MqttEventsException, Docker2MqttStatsException
 from .type_definitions import (
     ContainerDeviceEntry,
     ContainerEvent,
@@ -197,7 +198,18 @@ class Docker2Mqtt:
         self.mqtt_disconnect()
 
     def loop(self) -> None:
-        """Start the loop."""
+        """Start the loop.
+
+        Raises
+        ------
+        Docker2MqttEventsException
+            If anything goes wrong in the processing of the events
+        Docker2MqttStatsException
+            If anything goes wrong in the processing of the stats
+        Exception
+            If anything goes wrong outside of the known exceptions
+
+        """
 
         self.remove_destroyed_containers()
 
@@ -213,11 +225,42 @@ class Docker2Mqtt:
             main_logger.warning("Restarting stats thread")
             self.docker_stats_t.start()
 
-    def loop_busy(self) -> None:
-        """Start the loop (blocking)."""
+    def loop_busy(self, raise_known_exceptions: bool = False) -> None:
+        """Start the loop (blocking).
+
+        Parameters
+        ----------
+        raise_known_exceptions : bool = False
+            Should any known exception be raised or ignored
+
+        Raises
+        ------
+        Docker2MqttEventsException
+            If anything goes wrong in the processing of the events
+        Docker2MqttStatsException
+            If anything goes wrong in the processing of the stats
+        Exception
+            If anything goes wrong outside of the known exceptions
+
+        """
 
         while True:
-            self.loop()
+            try:
+                self.loop()
+            except Docker2MqttEventsException as ex:
+                if raise_known_exceptions:
+                    raise ex
+                else:
+                    main_logger.warning(
+                        "Do not raise due to raise_known_exceptions=False: %s", str(ex)
+                    )
+            except Docker2MqttStatsException as ex:
+                if raise_known_exceptions:
+                    raise ex
+                else:
+                    main_logger.warning(
+                        "Do not raise due to raise_known_exceptions=False: %s", str(ex)
+                    )
 
             # Calculate next iteration between (~0.2s and 0.001s)
             sleep_time = 0.001 + 0.2 / MAX_QUEUE_SIZE * (
@@ -227,26 +270,20 @@ class Docker2Mqtt:
             main_logger.debug("Sleep for %f.5fs until next iteration", sleep_time)
             sleep(sleep_time)
 
-    def mqtt_disconnect(self) -> None:
-        """Make sure we send our last_will message with atexit."""
-        self.mqtt.publish(
-            self.status_topic,
-            "offline",
-            qos=self.cfg["mqtt_qos"],
-            retain=True,
-        )
-        self.mqtt.publish(
-            self.version_topic,
-            self.version,
-            qos=self.cfg["mqtt_qos"],
-            retain=True,
-        )
-        self.mqtt.disconnect()
-        sleep(1)
-        self.mqtt.loop_stop()
-
     def get_docker_version(self) -> str:
-        """Get the docker version and save it to a global value."""
+        """Get the docker version and save it to a global value.
+
+        Returns
+        -------
+        str
+            The docker version as string
+
+        Raises
+        ------
+        FileNotFoundError
+            If docker socket is not accessible.
+
+        """
         try:
             # Run the `docker --version` command
             result = subprocess.run(
@@ -266,7 +303,23 @@ class Docker2Mqtt:
             return "Docker is not installed or not found in PATH."
 
     def mqtt_send(self, topic: str, payload: str, retain: bool = False) -> None:
-        """Send a mqtt payload to for a topic."""
+        """Send a mqtt payload to for a topic.
+
+        Parameters
+        ----------
+        topic : str
+            The topic to send a payload to
+        payload : str
+            The payload to send to the topic
+        retain : bool = False
+            Whether the payload should be retained by the mqtt server
+
+        Raises
+        ------
+        Exception
+            If the mqtt client could not send the data
+
+        """
         try:
             main_logger.debug("Sending to MQTT: %s: %s", topic, payload)
             self.mqtt.publish(
@@ -275,6 +328,29 @@ class Docker2Mqtt:
 
         except Exception as e:
             main_logger.error("MQTT Publish Failed: %s", str(e))
+            raise e
+
+    def mqtt_disconnect(self) -> None:
+        """Make sure we send our last_will message."""
+        try:
+            self.mqtt.publish(
+                self.status_topic,
+                "offline",
+                qos=self.cfg["mqtt_qos"],
+                retain=True,
+            )
+            self.mqtt.publish(
+                self.version_topic,
+                self.version,
+                qos=self.cfg["mqtt_qos"],
+                retain=True,
+            )
+            self.mqtt.disconnect()
+            sleep(1)
+            self.mqtt.loop_stop()
+        except Exception as e:
+            main_logger.error("MQTT Disconnect: %s", str(e))
+            raise e
 
     def readline_events_thread(self) -> None:
         """Run docker events and continually read lines from it."""
@@ -296,7 +372,8 @@ class Docker2Mqtt:
                     else:
                         raise ReferenceError("process stdout is undefined")
         except Exception as ex:
-            thread_logger.debug("Error Running Events thread:  %s", str(ex))
+            thread_logger.error("Error Running Events thread: %s", str(ex))
+            thread_logger.debug("Waiting for main thread to restart this thread")
 
     def readline_stats_thread(self) -> None:
         """Run docker events and continually read lines from it."""
@@ -318,12 +395,25 @@ class Docker2Mqtt:
                     else:
                         raise ReferenceError("process stdout is undefined")
         except Exception as ex:
-            thread_logger.debug("Error Running Stats thread: %s", str(ex))
+            thread_logger.error("Error Running Stats thread: %s", str(ex))
+            thread_logger.debug("Waiting for main thread to restart this thread")
 
     def device_definition(
         self, container_entry: ContainerEvent
     ) -> ContainerDeviceEntry:
-        """Create device definition of a container for each entity for home assistant."""
+        """Create device definition of a container for each entity for home assistant.
+
+        Parameters
+        ----------
+        container_entry : ContainerEvent
+            The container event with the data to build a device entry config
+
+        Returns
+        -------
+        ContainerDeviceEntry
+            The device entry config
+
+        """
         container = container_entry["name"]
         return {
             "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}_{container}",
@@ -332,7 +422,14 @@ class Docker2Mqtt:
         }
 
     def register_container(self, container_entry: ContainerEvent) -> None:
-        """Create discovery topics of container for all entities for home assistant."""
+        """Create discovery topics of container for all entities for home assistant.
+
+        Parameters
+        ----------
+        container_entry : ContainerEvent
+            The container event with the data to register a container
+
+        """
         container = container_entry["name"]
         self.known_event_containers[container] = container_entry
 
@@ -393,7 +490,14 @@ class Docker2Mqtt:
             )
 
     def unregister_container(self, container: str) -> None:
-        """Remove all discovery topics of container from home assistant."""
+        """Remove all discovery topics of container from home assistant.
+
+        Parameters
+        ----------
+        container : str
+            The container name unregister a container
+
+        """
 
         # Events
         self.mqtt_send(
@@ -427,7 +531,24 @@ class Docker2Mqtt:
     def stat_to_value(
         self, stat: str, container: str, matches: re.Match[str] | None
     ) -> Tuple[float, float]:
-        """Convert a regex matches to two values, i.e. used and limit for memory."""
+        """Convert a regex matches to two values, i.e. used and limit for memory.
+
+        Parameters
+        ----------
+        stat : str
+            The stat string received from the docker stat command to parse
+        container : str
+            The container of the stat string
+        matches: re.Match[str] | None
+            The matches for the values to filter from the stat string
+
+        Returns
+        -------
+        Tuple[float, float]
+            The used and limit values extracted from the stat string
+
+
+        """
         used_symbol = ""
         limit_symbol = ""
         used = 0.0
@@ -494,7 +615,14 @@ class Docker2Mqtt:
                 del self.pending_destroy_operations[container]
 
     def handle_events_queue(self) -> None:
-        """Check if any event is present in the queue and process it."""
+        """Check if any event is present in the queue and process it.
+
+        Raises
+        ------
+        Docker2MqttEventsException
+            If anything goes wrong in the processing of the events
+
+        """
         event_line = ""
 
         docker_events_qsize = self.docker_events.qsize()
@@ -585,19 +713,32 @@ class Docker2Mqtt:
                         events_logger.info("Container %s has unpaused.", container)
                         self.known_event_containers[container]["status"] = "running"
                         self.known_event_containers[container]["state"] = "on"
+                    else:
+                        events_logger.debug("Unknown event: %s", event["status"])
 
-                    events_logger.debug("Sending mqtt payload")
-                    self.mqtt_send(
-                        self.events_topic.format(container),
-                        json.dumps(self.known_event_containers[container]),
-                        retain=True,
-                    )
             except Exception as ex:
                 events_logger.error("Error parsing line: %s", event_line)
                 events_logger.error("Error of parsed line: %s", str(ex))
+                raise Docker2MqttEventsException(
+                    f"Error parsing line: {event_line}"
+                ) from ex
+
+            events_logger.debug("Sending mqtt payload")
+            self.mqtt_send(
+                self.events_topic.format(container),
+                json.dumps(self.known_event_containers[container]),
+                retain=True,
+            )
 
     def handle_stats_queue(self) -> None:
-        """Check if any event is present in the queue and process it."""
+        """Check if any event is present in the queue and process it.
+
+        Raises
+        ------
+        Docker2MqttStatsException
+            If anything goes wrong in the processing of the stats
+
+        """
         stat_line = ""
 
         docker_stats_qsize = self.docker_stats.qsize()
@@ -765,12 +906,6 @@ class Docker2Mqtt:
                         stats_logger.debug(
                             "Printing container stats: %s", container_stats
                         )
-                        stats_logger.debug("Sending mqtt payload")
-                        self.mqtt_send(
-                            self.stats_topic.format(container),
-                            json.dumps(container_stats),
-                            retain=False,
-                        )
                         self.last_stat_containers[container] = container_stats
                     else:
                         stats_logger.debug(
@@ -778,15 +913,17 @@ class Docker2Mqtt:
                             container,
                         )
 
-            except IndexError as ex:
-                raise ex
-            except ValueError as ex:
-                raise ex
-            except ReferenceError as ex:
-                raise ex
-            except TypeError as ex:
-                raise ex
             except Exception as ex:
                 stats_logger.error("Error parsing line: %s", stat_line)
                 stats_logger.error("Error of parsed line: %s", str(ex))
                 stats_logger.info(":".join(hex(ord(x))[2:] for x in stat_line))
+                raise Docker2MqttStatsException(
+                    f"Error parsing line: {stat_line}"
+                ) from ex
+
+            stats_logger.debug("Sending mqtt payload")
+            self.mqtt_send(
+                self.stats_topic.format(container),
+                json.dumps(container_stats),
+                retain=False,
+            )

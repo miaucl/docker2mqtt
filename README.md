@@ -91,15 +91,15 @@ You can use environment variables to control the behavior.
 
 ## Consuming The Data
 
-Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and its type can be inspected in [types.py](./src/types.py).
+Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and its type can be inspected in [type_definitions.py](./docker2mqtt/type_definitions.py) or the documentation.
 
-Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so can be inspected in [types.py](./src/types.py).
+Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so can be inspected in [type_definitions.py](./docker2mqtt/type_definitions.py) or the documentation.
 
 ## Home Assistant
 
 After you start the service binary sensors should show up in Home Assistant immediately. Look for sensors that start with `binary_sensor.docker`. Metadata about the container will be available as attributes, which you can then expose using template sensors if you wish.
 
-![Screenshot of Home Assistant sensor showing status and attributes.](docs/ha_screenshot.png)
+![Screenshot of Home Assistant sensor showing status and attributes.](./media/ha_screenshot.png)
 
 ## Dev
 

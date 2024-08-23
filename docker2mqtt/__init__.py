@@ -2,7 +2,6 @@
 
 __VERSION__ = "2.0.0-rc.0"
 
-
 from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
@@ -26,6 +25,7 @@ from .const import (
     WATCHED_EVENTS,
 )
 from .docker2mqtt import DEFAULT_CONFIG, Docker2Mqtt
+from .exceptions import Docker2MqttEventsException, Docker2MqttStatsException
 from .type_definitions import (
     ContainerDeviceEntry,
     ContainerEntry,
@@ -68,4 +68,6 @@ __all__ = [
     "ANSI_ESCAPE",
     "STATS_REGISTRATION_ENTRIES",
     "DEFAULT_CONFIG",
+    "Docker2MqttEventsException",
+    "Docker2MqttStatsException",
 ]
