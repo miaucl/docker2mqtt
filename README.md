@@ -101,6 +101,10 @@ After you start the service (binary) sensors should show up in Home Assistant im
 
 ![Screenshot of Home Assistant sensor showing status and attributes.](https://raw.githubusercontent.com/miaucl/docker2mqtt/master/media/ha_screenshot.png)
 
+## Documentation
+
+Using `mkdocs`, the documentation and reference is generated and available on [github pages](https://miaucl.github.io/docker2mqtt/).
+
 ## Dev
 
 Setup the dev environment using VSCode, it is highly recommended.

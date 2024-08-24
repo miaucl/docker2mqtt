@@ -11,6 +11,7 @@
     "memorylimit",
     "memoryused",
     "miaucl",
+    "mkdocs",
     "mosquitto",
     "mqtt",
     "mypy",
