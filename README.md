@@ -7,9 +7,9 @@
 
 This program uses `docker events` to watch for changes in your docker containers, and delivers current status to MQTT. It will also publish Home Assistant MQTT Discovery messages so that binary sensors automatically show up in Home Assistant.
 
-## Running
+## Installation and Deployment
 
-It available as python package on pypi or as a docker image.
+It is available as python package on [pypi/docker2mqtt](https://pypi.org/p/docker2mqtt) or as a docker image on [ghcr.io/docker2mqtt](https://github.com/miaucl/docker2mqtt/pkgs/container/docker2mqtt).
 
 ### Pypi package
 
@@ -38,7 +38,7 @@ except Exception as ex:
 
 ### Docker image
 
-[![1] ![2] ![3]](https://github.com/eggplants/ghcr-badge/pkgs/container/ghcr-badge)
+[![1] ![2] ![3]](https://github.com/miaucl/docker2mqtt/pkgs/container/docker2mqtt)
 
 [1]: <https://ghcr-badge.egpl.dev/miaucl/docker2mqtt/tags?color=%23B8860B&ignore=latest&n=1&label=image&trim=>
 [2]: <https://ghcr-badge.egpl.dev/miaucl/docker2mqtt/tags?color=%2344cc11&ignore=latest,*-rc*&n=3&label=image&trim=>
@@ -91,15 +91,15 @@ You can use environment variables to control the behavior.
 
 ## Consuming The Data
 
-Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and its type can be inspected in [type_definitions.py](./docker2mqtt/type_definitions.py) or the documentation.
+Data is published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/events` using JSON serialization. It will arrive whenever a change happens and its type can be inspected in [type_definitions.py](https://github.com/miaucl/docker2mqtt/blob/master/docker2mqtt/type_definitions.py) or the documentation.
 
-Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so can be inspected in [type_definitions.py](./docker2mqtt/type_definitions.py) or the documentation.
+Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/stats` using JSON serialization. It will arrive every `STATS_RECORD_SECONDS` seconds or so can be inspected in [type_definitions.py](https://github.com/miaucl/docker2mqtt/blob/master/docker2mqtt/type_definitions.py) or the documentation.
 
 ## Home Assistant
 
-After you start the service binary sensors should show up in Home Assistant immediately. Look for sensors that start with `binary_sensor.docker`. Metadata about the container will be available as attributes, which you can then expose using template sensors if you wish.
+After you start the service (binary) sensors should show up in Home Assistant immediately. Look for sensors that start with `(binary_)sensor.docker`. Metadata about the container will be available as attributes for events, which you can then expose using template sensors if you wish.
 
-![Screenshot of Home Assistant sensor showing status and attributes.](./media/ha_screenshot.png)
+![Screenshot of Home Assistant sensor showing status and attributes.](https://raw.githubusercontent.com/miaucl/docker2mqtt/master/media/ha_screenshot.png)
 
 ## Dev
 
