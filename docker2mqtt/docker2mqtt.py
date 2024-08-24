@@ -635,8 +635,8 @@ class Docker2Mqtt:
             return
 
         if self.b_events and docker_events_qsize > 0:
-            try:
-                if event_line and len(event_line) > 0:
+            if event_line and len(event_line) > 0:
+                try:
                     event = json.loads(event_line)
                     if event["status"] not in WATCHED_EVENTS:
                         events_logger.info("Not a watched event: %s", event["status"])
@@ -716,19 +716,19 @@ class Docker2Mqtt:
                     else:
                         events_logger.debug("Unknown event: %s", event["status"])
 
-            except Exception as ex:
-                events_logger.error("Error parsing line: %s", event_line)
-                events_logger.error("Error of parsed line: %s", str(ex))
-                raise Docker2MqttEventsException(
-                    f"Error parsing line: {event_line}"
-                ) from ex
+                except Exception as ex:
+                    events_logger.error("Error parsing line: %s", event_line)
+                    events_logger.error("Error of parsed line: %s", str(ex))
+                    raise Docker2MqttEventsException(
+                        f"Error parsing line: {event_line}"
+                    ) from ex
 
-            events_logger.debug("Sending mqtt payload")
-            self.mqtt_send(
-                self.events_topic.format(container),
-                json.dumps(self.known_event_containers[container]),
-                retain=True,
-            )
+                events_logger.debug("Sending mqtt payload")
+                self.mqtt_send(
+                    self.events_topic.format(container),
+                    json.dumps(self.known_event_containers[container]),
+                    retain=True,
+                )
 
     def handle_stats_queue(self) -> None:
         """Check if any event is present in the queue and process it.
@@ -740,7 +740,7 @@ class Docker2Mqtt:
 
         """
         stat_line = ""
-        container_stats = None
+        send_mqtt = False
 
         docker_stats_qsize = self.docker_stats.qsize()
         try:
@@ -758,8 +758,8 @@ class Docker2Mqtt:
             #################################
 
         if self.b_stats and docker_stats_qsize > 0:
-            try:
-                if stat_line:
+            if stat_line and len(stat_line) > 0:
+                try:
                     stat_line = "".join(
                         [c for c in stat_line if ord(c) > 31 or ord(c) == 9]
                     )
@@ -796,6 +796,7 @@ class Docker2Mqtt:
                     )
 
                     if stat_key != existing_stat_key and container_date <= check_date:
+                        send_mqtt = True
                         stats_logger.info("Processing %s stats", container)
                         self.known_stat_containers[container]["key"] = stat_key
                         self.known_stat_containers[container]["last"] = (
@@ -914,17 +915,18 @@ class Docker2Mqtt:
                             container,
                         )
 
-            except Exception as ex:
-                stats_logger.error("Error parsing line: %s", stat_line)
-                stats_logger.error("Error of parsed line: %s", str(ex))
-                stats_logger.info(":".join(hex(ord(x))[2:] for x in stat_line))
-                raise Docker2MqttStatsException(
-                    f"Error parsing line: {stat_line}"
-                ) from ex
+                except Exception as ex:
+                    stats_logger.error("Error parsing line: %s", stat_line)
+                    stats_logger.error("Error of parsed line: %s", str(ex))
+                    stats_logger.info(":".join(hex(ord(x))[2:] for x in stat_line))
+                    raise Docker2MqttStatsException(
+                        f"Error parsing line: {stat_line}"
+                    ) from ex
 
-            stats_logger.debug("Sending mqtt payload")
-            self.mqtt_send(
-                self.stats_topic.format(container),
-                json.dumps(self.last_stat_containers[container]),
-                retain=False,
-            )
+                if send_mqtt:
+                    stats_logger.debug("Sending mqtt payload")
+                    self.mqtt_send(
+                        self.stats_topic.format(container),
+                        json.dumps(self.last_stat_containers[container]),
+                        retain=False,
+                    )
