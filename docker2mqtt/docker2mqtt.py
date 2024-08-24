@@ -740,6 +740,7 @@ class Docker2Mqtt:
 
         """
         stat_line = ""
+        container_stats = None
 
         docker_stats_qsize = self.docker_stats.qsize()
         try:
@@ -924,6 +925,6 @@ class Docker2Mqtt:
             stats_logger.debug("Sending mqtt payload")
             self.mqtt_send(
                 self.stats_topic.format(container),
-                json.dumps(container_stats),
+                json.dumps(self.last_stat_containers[container]),
                 retain=False,
             )
