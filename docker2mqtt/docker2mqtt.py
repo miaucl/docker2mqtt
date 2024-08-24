@@ -267,7 +267,7 @@ class Docker2Mqtt:
                 MAX_QUEUE_SIZE
                 - max(self.docker_events.qsize(), self.docker_stats.qsize())
             )
-            main_logger.debug("Sleep for %f.5fs until next iteration", sleep_time)
+            main_logger.debug("Sleep for %.5fs until next iteration", sleep_time)
             sleep(sleep_time)
 
     def get_docker_version(self) -> str:
