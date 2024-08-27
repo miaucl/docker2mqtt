@@ -2,6 +2,9 @@ name: Publish
 
 on: 'push'
 
+env:
+  DEFAULT_PYTHON: "3.12"
+
 jobs:
   build:
     name: Build distribution 📦
@@ -12,7 +15,8 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.x"
+        python-version: ${{ env.DEFAULT_PYTHON }}
+        check-latest: true
     - name: Install pypa/build
       run: >-
         python3 -m

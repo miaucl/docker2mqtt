@@ -6,3 +6,4 @@ site
 local-test.sh
 docker2mqtt.egg-info
 __pycache__
+build
