@@ -8,6 +8,7 @@
     "gethostname",
     "HOMEASSISTANT",
     "levelname",
+    "markdownlint",
     "memorylimit",
     "memoryused",
     "miaucl",

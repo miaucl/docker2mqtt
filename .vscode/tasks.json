@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Python: Build docker2mqtt docker image",
+      "label": "Docker: Build docker2mqtt image",
       "type": "shell",
       "command": "docker build --tag docker2mqtt:latest .",
       "problemMatcher": [],
@@ -49,7 +49,7 @@
       }
     },
     {
-      "label": "Python: Run docker2mqtt commit hooks",
+      "label": "pre-commit: run all files",
       "type": "shell",
       "command": "pre-commit run --all-files",
       "problemMatcher": [],

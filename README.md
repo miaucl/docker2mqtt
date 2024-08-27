@@ -82,8 +82,8 @@ You can use environment variables to control the behavior.
 | `mqtt_client_id`| `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
 | `mqtt_host`| `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
 | `mqtt_port`| `MQTT_PORT` | `1883` | The port on the broker to connect to. |
-| `mqtt_user`| `MQTT_USER` | `` | The user to send to the MQTT broker. Leave unset to disable authentication. |
-| `mqtt_password`| `MQTT_PASSWD` | `` | The password to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_user`| `MQTT_USER` | | The user to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_password`| `MQTT_PASSWD` | | The password to send to the MQTT broker. Leave unset to disable authentication. |
 | `mqtt_timeout`| `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
 | `mqtt_topic_prefix`| `MQTT_TOPIC_PREFIX` | `ping` | The MQTT topic prefix. With the default data will be published to `ping/<hostname>`. |
 | `mqtt_qos`| `MQTT_QOS` | `1` | The MQTT QOS level |
@@ -144,7 +144,3 @@ Following VSCode integrations may be helpful:
 ## Credits
 
 This is a detached fork from the repo <https://github.com/skullydazed/docker2mqtt>, which does not seem to get evolved anymore.
-
-
-TODO:
-- cli interface
