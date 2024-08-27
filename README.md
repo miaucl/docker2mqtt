@@ -15,7 +15,10 @@ It is available as python package on [pypi/docker2mqtt](https://pypi.org/p/docke
 
 [![PyPI version](https://badge.fury.io/py/docker2mqtt.svg)](https://pypi.org/p/docker2mqtt)
 
-`pip install docker2mqtt`
+```bash
+pip install docker2mqtt
+docker2mqtt --name MyDockerName --events=60 -vvvvv
+```
 
 Usage
 
@@ -97,6 +100,14 @@ Data is also published to the topic `docker/<DOCKER2MQTT_HOSTNAME>/<container>/s
 
 ## Home Assistant
 
+Once `docker2mqtt` is collecting data and publishing it to MQTT, it's rather trivial to use the data in Home Assistant.
+
+A few assumptions:
+
+- **Home Assistant is already configured to use a MQTT broker.** Setting up MQTT and HA is beyond the scope of this documentation. However, there are a lot of great tutorials on YouTube. An external broker (or as add-on) like [Mosquitto](https://mosquitto.org/) will need to be installed and the HA MQTT integration configured.
+- **The HA MQTT integration is configured to use `homeassistant` as the MQTT autodiscovery prefix.** This is the default for the integration and also the default for `linux2mqtt`. If you have changed this from the default, use the `--prefix` parameter to specify the correct one.
+- **You're not using TLS to connect to the MQTT broker.** Currently `linux2mqtt` only works with unencrypted connections. Username / password authentication can be specified with the `--username` and `--password` parameters, but TLS encryption is not yet supported.
+
 After you start the service (binary) sensors should show up in Home Assistant immediately. Look for sensors that start with `(binary_)sensor.docker`. Metadata about the container will be available as attributes for events, which you can then expose using template sensors if you wish.
 
 ![Screenshot of Home Assistant sensor showing status and attributes.](https://raw.githubusercontent.com/miaucl/docker2mqtt/master/media/ha_screenshot.png)
@@ -126,10 +137,14 @@ pre-commit run --all-files
 
 Following VSCode integrations may be helpful:
 
-* [ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
-* [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
-* [markdownlint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)
+- [ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
+- [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
+- [markdownlint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)
 
 ## Credits
 
 This is a detached fork from the repo <https://github.com/skullydazed/docker2mqtt>, which does not seem to get evolved anymore.
+
+
+TODO:
+- cli interface

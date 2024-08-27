@@ -4,9 +4,54 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Python: Build docker2mqtt",
+      "label": "Python: Build docker2mqtt docker image",
       "type": "shell",
       "command": "docker build --tag docker2mqtt:latest .",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build"
+      },
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "Python: Build docker2mqtt package",
+      "type": "shell",
+      "command": "pip install -e .",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build"
+      },
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "mkdocs: serve",
+      "type": "shell",
+      "command": "mkdocs serve",
+      "problemMatcher": [],
+      "presentation": {
+        "focus": true,
+        "reveal": "always"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "Python: Run docker2mqtt commit hooks",
+      "type": "shell",
+      "command": "pre-commit run --all-files",
       "problemMatcher": [],
       "group": {
         "kind": "build"

@@ -1,9 +1,10 @@
-"""docker2mqtt lib."""
+"""docker2mqtt package."""
 
 __VERSION__ = "2.0.0-rc.5"
 
 from .const import (
     ANSI_ESCAPE,
+    DEFAULT_CONFIG,
     DESTROYED_CONTAINER_TTL_DEFAULT,
     DOCKER_EVENTS_CMD,
     DOCKER_PS_CMD,
@@ -24,8 +25,14 @@ from .const import (
     STATS_REGISTRATION_ENTRIES,
     WATCHED_EVENTS,
 )
-from .docker2mqtt import DEFAULT_CONFIG, Docker2Mqtt
-from .exceptions import Docker2MqttEventsException, Docker2MqttStatsException
+from .docker2mqtt import Docker2Mqtt
+from .exceptions import (
+    Docker2MqttConfigException,
+    Docker2MqttConnectionException,
+    Docker2MqttEventsException,
+    Docker2MqttException,
+    Docker2MqttStatsException,
+)
 from .type_definitions import (
     ContainerDeviceEntry,
     ContainerEntry,
@@ -70,4 +77,7 @@ __all__ = [
     "DEFAULT_CONFIG",
     "Docker2MqttEventsException",
     "Docker2MqttStatsException",
+    "Docker2MqttException",
+    "Docker2MqttConfigException",
+    "Docker2MqttConnectionException",
 ]

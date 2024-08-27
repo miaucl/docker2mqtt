@@ -2,6 +2,9 @@
 
 # Env config
 import re
+import socket
+
+from .type_definitions import Docker2MqttConfig
 
 LOG_LEVEL_DEFAULT = "INFO"
 DESTROYED_CONTAINER_TTL_DEFAULT = 24 * 60 * 60  # s
@@ -43,7 +46,7 @@ ANSI_ESCAPE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 # fmt: off
 STATS_REGISTRATION_ENTRIES = [
     # label,field,device_class,unit,icon
-    ('CPU',                     'cpu',              None,           '%',    'mdi:cpu-64-bit'),
+    ('CPU',                     'cpu',              None,           '%',    'mdi:chip'),
     ('Memory',                  'memoryused',       'data_size',    'MB',   'mdi:memory'),
     ('Network Input',           'netinput',         'data_size',    'MB',   'mdi:download-network'),
     ('Network Output',          'netoutput',        'data_size',    'MB',   'mdi:upload-network'),
@@ -55,3 +58,23 @@ STATS_REGISTRATION_ENTRIES = [
     ('Block Output Rate',       'blockoutputrate',  'data_rate',    'MB/s', 'mdi:database-arrow-down-outline'),
 ]
 # fmt: on
+
+DEFAULT_CONFIG = Docker2MqttConfig(
+    {
+        "log_level": LOG_LEVEL_DEFAULT,
+        "destroyed_container_ttl": DESTROYED_CONTAINER_TTL_DEFAULT,
+        "homeassistant_prefix": HOMEASSISTANT_PREFIX_DEFAULT,
+        "docker2mqtt_hostname": socket.gethostname(),
+        "mqtt_client_id": MQTT_CLIENT_ID_DEFAULT,
+        "mqtt_user": "",
+        "mqtt_password": "",
+        "mqtt_host": "",
+        "mqtt_port": MQTT_PORT_DEFAULT,
+        "mqtt_timeout": MQTT_TIMEOUT_DEFAULT,
+        "mqtt_topic_prefix": MQTT_TOPIC_PREFIX_DEFAULT,
+        "mqtt_qos": MQTT_QOS_DEFAULT,
+        "enable_events": EVENTS_DEFAULT,
+        "enable_stats": STATS_DEFAULT,
+        "stats_record_seconds": STATS_RECORD_SECONDS_DEFAULT,
+    }
+)

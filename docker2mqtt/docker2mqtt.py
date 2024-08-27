@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Listens to docker events and stats for containers and sends it to mqtt and supports discovery for home assistant."""
 
+import argparse
 import datetime
 import hashlib
 import json
@@ -8,6 +9,8 @@ import logging
 import platform
 from queue import Empty, Queue
 import re
+import signal
+import socket
 import subprocess
 from subprocess import PIPE, Popen
 import sys
@@ -24,52 +27,32 @@ from .const import (
     DOCKER_EVENTS_CMD,
     DOCKER_STATS_CMD,
     DOCKER_VERSION_CMD,
-    EVENTS_DEFAULT,
     HOMEASSISTANT_PREFIX_DEFAULT,
     INVALID_HA_TOPIC_CHARS,
-    LOG_LEVEL_DEFAULT,
     MAX_QUEUE_SIZE,
     MQTT_CLIENT_ID_DEFAULT,
     MQTT_PORT_DEFAULT,
     MQTT_QOS_DEFAULT,
     MQTT_TIMEOUT_DEFAULT,
     MQTT_TOPIC_PREFIX_DEFAULT,
-    STATS_DEFAULT,
     STATS_RECORD_SECONDS_DEFAULT,
     STATS_REGISTRATION_ENTRIES,
     WATCHED_EVENTS,
 )
-from .exceptions import Docker2MqttEventsException, Docker2MqttStatsException
+from .exceptions import (
+    Docker2MqttConfigException,
+    Docker2MqttConnectionException,
+    Docker2MqttEventsException,
+    Docker2MqttStatsException,
+)
 from .type_definitions import (
     ContainerDeviceEntry,
+    ContainerEntry,
     ContainerEvent,
     ContainerStats,
     ContainerStatsRef,
     Docker2MqttConfig,
 )
-
-# Default config
-
-DEFAULT_CONFIG = Docker2MqttConfig(
-    {
-        "log_level": LOG_LEVEL_DEFAULT,
-        "destroyed_container_ttl": DESTROYED_CONTAINER_TTL_DEFAULT,
-        "homeassistant_prefix": HOMEASSISTANT_PREFIX_DEFAULT,
-        "docker2mqtt_hostname": "docker2mqtt-host",
-        "mqtt_client_id": MQTT_CLIENT_ID_DEFAULT,
-        "mqtt_user": "",
-        "mqtt_password": "",
-        "mqtt_host": "",
-        "mqtt_port": MQTT_PORT_DEFAULT,
-        "mqtt_timeout": MQTT_TIMEOUT_DEFAULT,
-        "mqtt_topic_prefix": MQTT_TOPIC_PREFIX_DEFAULT,
-        "mqtt_qos": MQTT_QOS_DEFAULT,
-        "enable_events": EVENTS_DEFAULT,
-        "enable_stats": STATS_DEFAULT,
-        "stats_record_seconds": STATS_RECORD_SECONDS_DEFAULT,
-    }
-)
-
 
 # Configure logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -81,15 +64,61 @@ stats_logger = logging.getLogger("main")
 
 
 class Docker2Mqtt:
-    """docker2mqtt class."""
+    """docker2mqtt class.
+
+    Attributes
+    ----------
+    version
+        The version of linux2mqtt
+    cfg
+        The config for docker2mqtt
+    b_stats
+        Activate the stats
+    b_events
+        Activate the events
+    docker_events
+        Queue with docker events
+    docker_stats
+        Queue with docker stats
+
+    known_event_containers
+        The dict with the known container events
+    known_stat_containers
+        The dict with the known container stats references
+    last_stat_containers
+        The dict with the last container stats
+    mqtt
+        The mqtt client
+    docker_events_t
+        The thread to collect events from docker
+    docker_stats_t
+        The thread to collect stats from docker
+    docker_version
+        The docker version
+    discovery_binary_sensor_topic
+        Topic template for a binary sensor
+    discovery_sensor_topic
+        Topic template for a nary sensor
+    status_topic
+        Topic template for a status value
+    version_topic
+        Topic template for a version value
+    stats_topic
+        Topic template for stats
+    events_topic
+        Topic template for an events
+    do_not_exit
+        Prevent exit from within docker2mqtt, when handled outside
+
+    """
 
     # Version
-    version = __VERSION__
+    version: str = __VERSION__
 
     cfg: Docker2MqttConfig
 
-    b_stats = False
-    b_events = False
+    b_stats: bool = False
+    b_events: bool = False
 
     docker_events: Queue[str] = Queue(maxsize=MAX_QUEUE_SIZE)
     docker_stats: Queue[str] = Queue(maxsize=MAX_QUEUE_SIZE)
@@ -112,10 +141,22 @@ class Docker2Mqtt:
     stats_topic: str
     events_topic: str
 
-    def __init__(self, cfg: Docker2MqttConfig):
-        """Initialize the docker2mqtt."""
+    do_not_exit: bool
+
+    def __init__(self, cfg: Docker2MqttConfig, do_not_exit: bool = False):
+        """Initialize the docker2mqtt.
+
+        Parameters
+        ----------
+        cfg
+            The configuration object for docker2mqtt
+        do_not_exit
+            Prevent exit from within docker2mqtt, when handled outside
+
+        """
 
         self.cfg = cfg
+        self.do_not_exit = do_not_exit
 
         self.discovery_binary_sensor_topic = f"{cfg['homeassistant_prefix']}/binary_sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
         self.discovery_sensor_topic = f"{cfg['homeassistant_prefix']}/sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
@@ -141,61 +182,104 @@ class Docker2Mqtt:
         events_logger.setLevel(self.cfg["log_level"].upper())
         stats_logger.setLevel(self.cfg["log_level"].upper())
 
-        self.docker_version = self.get_docker_version()
+        try:
+            self.docker_version = self._get_docker_version()
+        except FileNotFoundError as e:
+            raise Docker2MqttConfigException("Could not get docker version") from e
+
+        if not self.do_not_exit:
+            main_logger.info("Register signal handlers for SIGINT and SIGTERM")
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGINT, self._signal_handler)
 
         main_logger.info("Events enabled: %d", self.b_events)
         main_logger.info("Stats enabled: %d", self.b_stats)
 
-        # Setup MQTT
-        self.mqtt = paho.mqtt.client.Client(
-            callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore
-            client_id=self.cfg["mqtt_client_id"],
-        )
-        self.mqtt.username_pw_set(
-            username=self.cfg["mqtt_user"], password=self.cfg["mqtt_password"]
-        )
-        self.mqtt.will_set(
-            self.status_topic,
-            "offline",
-            qos=self.cfg["mqtt_qos"],
-            retain=True,
-        )
-        self.mqtt.connect(
-            self.cfg["mqtt_host"], self.cfg["mqtt_port"], self.cfg["mqtt_timeout"]
-        )
-        self.mqtt.loop_start()
-        self.mqtt_send(self.status_topic, "online", retain=True)
-        self.mqtt.publish(
-            self.version_topic,
-            self.version,
-            qos=self.cfg["mqtt_qos"],
-            retain=True,
-        )
+        try:
+            # Setup MQTT
+            self.mqtt = paho.mqtt.client.Client(
+                callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore
+                client_id=self.cfg["mqtt_client_id"],
+            )
+            self.mqtt.username_pw_set(
+                username=self.cfg["mqtt_user"], password=self.cfg["mqtt_password"]
+            )
+            self.mqtt.will_set(
+                self.status_topic,
+                "offline",
+                qos=self.cfg["mqtt_qos"],
+                retain=True,
+            )
+            self.mqtt.connect(
+                self.cfg["mqtt_host"], self.cfg["mqtt_port"], self.cfg["mqtt_timeout"]
+            )
+            self.mqtt.loop_start()
+            self._mqtt_send(self.status_topic, "online", retain=True)
+            self._mqtt_send(self.version_topic, self.version, retain=True)
+
+        except paho.mqtt.client.WebsocketConnectionError as e:
+            main_logger.error("Error while trying to connect to MQTT broker.")
+            main_logger.error(str(e))
+            raise Docker2MqttConnectionException from e
 
         started = False
-        if self.b_events:
-            logging.info("Starting Events thread")
-            self.docker_events_t = Thread(
-                target=self.readline_events_thread, daemon=True, name="Events"
-            )
-            self.docker_events_t.start()
-            started = True
+        try:
+            if self.b_events:
+                logging.info("Starting Events thread")
+                self.docker_events_t = Thread(
+                    target=self._readline_events_thread, daemon=True, name="Events"
+                )
+                self.docker_events_t.start()
+                started = True
+        except Exception as e:
+            main_logger.error("Error while trying to start events thread.")
+            main_logger.error(str(e))
+            raise Docker2MqttConfigException from e
 
-        if self.b_stats:
-            started = True
-            logging.info("Starting Stats thread")
-            self.docker_stats_t = Thread(
-                target=self.readline_stats_thread, daemon=True, name="Stats"
-            )
-            self.docker_stats_t.start()
+        try:
+            if self.b_stats:
+                started = True
+                logging.info("Starting Stats thread")
+                self.docker_stats_t = Thread(
+                    target=self._readline_stats_thread, daemon=True, name="Stats"
+                )
+                self.docker_stats_t.start()
+        except Exception as e:
+            main_logger.error("Error while trying to start stats thread.")
+            main_logger.error(str(e))
+            raise Docker2MqttConfigException from e
 
         if started is False:
             logging.critical("Nothing started, check your config!")
             sys.exit(1)
 
     def __del__(self) -> None:
-        """Stop everything."""
-        self.mqtt_disconnect()
+        """Destroy the class."""
+        self._cleanup()
+
+    def _signal_handler(self, _signum: Any, _frame: Any) -> None:
+        """Handle a signal for SIGINT or SIGTERM on the process.
+
+        Parameters
+        ----------
+        _signum : Any
+            (Unused)
+
+        _frame : Any
+            (Unused)
+
+        """
+        self._cleanup()
+        sys.exit(0)
+
+    def _cleanup(self) -> None:
+        """Cleanup the docker2mqtt."""
+        main_logger.warning("Shutting down gracefully.")
+        try:
+            self._mqtt_disconnect()
+        except Docker2MqttConnectionException as e:
+            main_logger.error("MQTT Cleanup Failed: %s", str(e))
+            main_logger.info("Ignoring cleanup error and exiting...")
 
     def loop(self) -> None:
         """Start the loop.
@@ -206,32 +290,42 @@ class Docker2Mqtt:
             If anything goes wrong in the processing of the events
         Docker2MqttStatsException
             If anything goes wrong in the processing of the stats
-        Exception
+        Docker2MqttException
             If anything goes wrong outside of the known exceptions
 
         """
 
-        self.remove_destroyed_containers()
+        self._remove_destroyed_containers()
 
-        self.handle_events_queue()
+        self._handle_events_queue()
 
-        self.handle_stats_queue()
+        self._handle_stats_queue()
 
-        if self.b_events and not self.docker_events_t.is_alive():
-            main_logger.warning("Restarting events thread")
-            self.docker_events_t.start()
+        try:
+            if self.b_events and not self.docker_events_t.is_alive():
+                main_logger.warning("Restarting events thread")
+                self.docker_events_t.start()
+        except Exception as e:
+            main_logger.error("Error while trying to restart events thread.")
+            main_logger.error(str(e))
+            raise Docker2MqttConfigException from e
 
-        if self.b_stats and not self.docker_stats_t.is_alive():
-            main_logger.warning("Restarting stats thread")
-            self.docker_stats_t.start()
+        try:
+            if self.b_stats and not self.docker_stats_t.is_alive():
+                main_logger.warning("Restarting stats thread")
+                self.docker_stats_t.start()
+        except Exception as e:
+            main_logger.error("Error while trying to restart stats thread.")
+            main_logger.error(str(e))
+            raise Docker2MqttConfigException from e
 
     def loop_busy(self, raise_known_exceptions: bool = False) -> None:
         """Start the loop (blocking).
 
         Parameters
         ----------
-        raise_known_exceptions : bool = False
-            Should any known exception be raised or ignored
+        raise_known_exceptions
+            Should any known processing exception be raised or ignored
 
         Raises
         ------
@@ -239,7 +333,7 @@ class Docker2Mqtt:
             If anything goes wrong in the processing of the events
         Docker2MqttStatsException
             If anything goes wrong in the processing of the stats
-        Exception
+        Docker2MqttException
             If anything goes wrong outside of the known exceptions
 
         """
@@ -270,7 +364,7 @@ class Docker2Mqtt:
             main_logger.debug("Sleep for %.5fs until next iteration", sleep_time)
             sleep(sleep_time)
 
-    def get_docker_version(self) -> str:
+    def _get_docker_version(self) -> str:
         """Get the docker version and save it to a global value.
 
         Returns
@@ -302,21 +396,21 @@ class Docker2Mqtt:
         except FileNotFoundError:
             return "Docker is not installed or not found in PATH."
 
-    def mqtt_send(self, topic: str, payload: str, retain: bool = False) -> None:
+    def _mqtt_send(self, topic: str, payload: str, retain: bool = False) -> None:
         """Send a mqtt payload to for a topic.
 
         Parameters
         ----------
-        topic : str
+        topic
             The topic to send a payload to
-        payload : str
+        payload
             The payload to send to the topic
-        retain : bool = False
+        retain
             Whether the payload should be retained by the mqtt server
 
         Raises
         ------
-        Exception
+        Docker2MqttConnectionError
             If the mqtt client could not send the data
 
         """
@@ -326,12 +420,19 @@ class Docker2Mqtt:
                 topic, payload=payload, qos=self.cfg["mqtt_qos"], retain=retain
             )
 
-        except Exception as e:
+        except paho.mqtt.client.WebsocketConnectionError as e:
             main_logger.error("MQTT Publish Failed: %s", str(e))
-            raise e
+            raise Docker2MqttConnectionException() from e
 
-    def mqtt_disconnect(self) -> None:
-        """Make sure we send our last_will message."""
+    def _mqtt_disconnect(self) -> None:
+        """Make sure we send our last_will message.
+
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
+
+        """
         try:
             self.mqtt.publish(
                 self.status_topic,
@@ -348,11 +449,11 @@ class Docker2Mqtt:
             self.mqtt.disconnect()
             sleep(1)
             self.mqtt.loop_stop()
-        except Exception as e:
+        except paho.mqtt.client.WebsocketConnectionError as e:
             main_logger.error("MQTT Disconnect: %s", str(e))
-            raise e
+            raise Docker2MqttConnectionException() from e
 
-    def readline_events_thread(self) -> None:
+    def _readline_events_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("event-thread")
         thread_logger.setLevel(self.cfg["log_level"].upper())
@@ -375,7 +476,7 @@ class Docker2Mqtt:
             thread_logger.error("Error Running Events thread: %s", str(ex))
             thread_logger.debug("Waiting for main thread to restart this thread")
 
-    def readline_stats_thread(self) -> None:
+    def _readline_stats_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("stats-thread")
         thread_logger.setLevel(self.cfg["log_level"].upper())
@@ -398,7 +499,7 @@ class Docker2Mqtt:
             thread_logger.error("Error Running Stats thread: %s", str(ex))
             thread_logger.debug("Waiting for main thread to restart this thread")
 
-    def device_definition(
+    def _device_definition(
         self, container_entry: ContainerEvent
     ) -> ContainerDeviceEntry:
         """Create device definition of a container for each entity for home assistant.
@@ -421,13 +522,18 @@ class Docker2Mqtt:
             "model": f"{platform.system()} {platform.machine()} {self.docker_version}",
         }
 
-    def register_container(self, container_entry: ContainerEvent) -> None:
+    def _register_container(self, container_entry: ContainerEvent) -> None:
         """Create discovery topics of container for all entities for home assistant.
 
         Parameters
         ----------
         container_entry : ContainerEvent
             The container event with the data to register a container
+
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
 
         """
         container = container_entry["name"]
@@ -438,23 +544,29 @@ class Docker2Mqtt:
             INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_events")
         )
         events_topic = self.events_topic.format(container)
-        registration_packet = {
-            "name": "Events",
-            "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
-            "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
-            "payload_available": "online",
-            "payload_not_available": "offline",
-            "state_topic": events_topic,
-            "value_template": '{{ value_json.state if value_json is not undefined and value_json.state is not undefined else "off" }}',
-            "payload_on": "on",
-            "payload_off": "off",
-            "device": self.device_definition(container_entry),
-            "device_class": "running",
-            "json_attributes_topic": events_topic,
-            "qos": self.cfg["mqtt_qos"],
-        }
-        self.mqtt_send(registration_topic, json.dumps(registration_packet), retain=True)
-        self.mqtt_send(
+        registration_packet = ContainerEntry(
+            {
+                "name": "Events",
+                "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
+                "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "state_topic": events_topic,
+                "value_template": '{{ value_json.state if value_json is not undefined and value_json.state is not undefined else "off" }}',
+                "payload_on": "on",
+                "payload_off": "off",
+                "icon": None,
+                "unit_of_measurement": None,
+                "device": self._device_definition(container_entry),
+                "device_class": "running",
+                "json_attributes_topic": events_topic,
+                "qos": self.cfg["mqtt_qos"],
+            }
+        )
+        self._mqtt_send(
+            registration_topic, json.dumps(registration_packet), retain=True
+        )
+        self._mqtt_send(
             events_topic,
             json.dumps(container_entry),
             retain=True,
@@ -466,48 +578,57 @@ class Docker2Mqtt:
                 INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_stats")
             )
             stats_topic = self.stats_topic.format(container)
-            registration_packet = {
-                "name": label,
-                "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
-                "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
-                "payload_available": "online",
-                "payload_not_available": "offline",
-                "state_topic": stats_topic,
-                "value_template": f"{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else None }}}}",
-                "unit_of_measurement": unit,
-                "icon": icon,
-                "device_class": device_class,
-                "device": self.device_definition(container_entry),
-                "qos": self.cfg["mqtt_qos"],
-            }
-            self.mqtt_send(
+            registration_packet = ContainerEntry(
+                {
+                    "name": label,
+                    "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
+                    "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
+                    "payload_available": "online",
+                    "payload_not_available": "offline",
+                    "state_topic": stats_topic,
+                    "value_template": f"{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else None }}}}",
+                    "unit_of_measurement": unit,
+                    "icon": icon,
+                    "payload_on": None,
+                    "payload_off": None,
+                    "json_attributes_topic": None,
+                    "device_class": device_class,
+                    "device": self._device_definition(container_entry),
+                    "qos": self.cfg["mqtt_qos"],
+                }
+            )
+            self._mqtt_send(
                 registration_topic, json.dumps(registration_packet), retain=True
             )
-            self.mqtt_send(
+            self._mqtt_send(
                 stats_topic,
                 json.dumps({}),
                 retain=True,
             )
 
-    def unregister_container(self, container: str) -> None:
+    def _unregister_container(self, container: str) -> None:
         """Remove all discovery topics of container from home assistant.
 
         Parameters
         ----------
-        container : str
+        container
             The container name unregister a container
 
-        """
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
 
+        """
         # Events
-        self.mqtt_send(
+        self._mqtt_send(
             self.discovery_binary_sensor_topic.format(
                 INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_events")
             ),
             "",
             retain=True,
         )
-        self.mqtt_send(
+        self._mqtt_send(
             self.events_topic.format(container),
             "",
             retain=True,
@@ -515,31 +636,31 @@ class Docker2Mqtt:
 
         # Stats
         for _, field, _, _, _ in STATS_REGISTRATION_ENTRIES:
-            self.mqtt_send(
+            self._mqtt_send(
                 self.discovery_sensor_topic.format(
                     INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_stats")
                 ),
                 "",
                 retain=True,
             )
-        self.mqtt_send(
+        self._mqtt_send(
             self.stats_topic.format(container),
             "",
             retain=True,
         )
 
-    def stat_to_value(
+    def _stat_to_value(
         self, stat: str, container: str, matches: re.Match[str] | None
     ) -> Tuple[float, float]:
         """Convert a regex matches to two values, i.e. used and limit for memory.
 
         Parameters
         ----------
-        stat : str
+        stat
             The stat string received from the docker stat command to parse
-        container : str
+        container
             The container of the stat string
-        matches: re.Match[str] | None
+        matches
             The matches for the values to filter from the stat string
 
         Returns
@@ -606,15 +727,30 @@ class Docker2Mqtt:
         )
         return used, limit
 
-    def remove_destroyed_containers(self) -> None:
-        """Remove any destroyed containers that have passed the TTL."""
-        for container, destroyed_at in self.pending_destroy_operations.copy().items():
-            if time() - destroyed_at > self.cfg["destroyed_container_ttl"]:
-                main_logger.info("Removing container %s from MQTT.", container)
-                self.unregister_container(container)
-                del self.pending_destroy_operations[container]
+    def _remove_destroyed_containers(self) -> None:
+        """Remove any destroyed containers that have passed the TTL.
 
-    def handle_events_queue(self) -> None:
+        Raises
+        ------
+        Docker2MqttEventsException
+            If anything goes wrong in the processing of the events
+
+        """
+        try:
+            for (
+                container,
+                destroyed_at,
+            ) in self.pending_destroy_operations.copy().items():
+                if time() - destroyed_at > self.cfg["destroyed_container_ttl"]:
+                    main_logger.info("Removing container %s from MQTT.", container)
+                    self._unregister_container(container)
+                    del self.pending_destroy_operations[container]
+        except Exception as e:
+            raise Docker2MqttEventsException(
+                "Could not remove destroyed containers"
+            ) from e
+
+    def _handle_events_queue(self) -> None:
         """Check if any event is present in the queue and process it.
 
         Raises
@@ -656,7 +792,7 @@ class Docker2Mqtt:
                             )
                             del self.pending_destroy_operations[container]
 
-                        self.register_container(
+                        self._register_container(
                             {
                                 "name": container,
                                 "image": event["from"],
@@ -691,8 +827,8 @@ class Docker2Mqtt:
                         events_logger.info(
                             "Container %s renamed to %s.", old_name, container
                         )
-                        self.unregister_container(old_name)
-                        self.register_container(
+                        self._unregister_container(old_name)
+                        self._register_container(
                             {
                                 "name": container,
                                 "image": self.known_event_containers[old_name]["image"],
@@ -724,13 +860,13 @@ class Docker2Mqtt:
                     ) from ex
 
                 events_logger.debug("Sending mqtt payload")
-                self.mqtt_send(
+                self._mqtt_send(
                     self.events_topic.format(container),
                     json.dumps(self.known_event_containers[container]),
                     retain=True,
                 )
 
-    def handle_stats_queue(self) -> None:
+    def _handle_stats_queue(self) -> None:
         """Check if any event is present in the queue and process it.
 
         Raises
@@ -816,7 +952,7 @@ class Docker2Mqtt:
                             regex,
                         )
                         matches = re.match(regex, stat["MemUsage"], re.MULTILINE)
-                        mem_mb_used, mem_mb_limit = self.stat_to_value(
+                        mem_mb_used, mem_mb_limit = self._stat_to_value(
                             "MEMORY", container, matches
                         )
 
@@ -824,7 +960,7 @@ class Docker2Mqtt:
                             'Getting NETIO from "%s" with "%s"', stat["NetIO"], regex
                         )
                         matches = re.match(regex, stat["NetIO"], re.MULTILINE)
-                        netinput, netoutput = self.stat_to_value(
+                        netinput, netoutput = self._stat_to_value(
                             "NETIO", container, matches
                         )
                         netinputrate = (
@@ -858,7 +994,7 @@ class Docker2Mqtt:
                             regex,
                         )
                         matches = re.match(regex, stat["BlockIO"], re.MULTILINE)
-                        blockinput, blockoutput = self.stat_to_value(
+                        blockinput, blockoutput = self._stat_to_value(
                             "BLOCKIO", container, matches
                         )
                         blockinputrate = (
@@ -925,8 +1061,142 @@ class Docker2Mqtt:
 
                 if send_mqtt:
                     stats_logger.debug("Sending mqtt payload")
-                    self.mqtt_send(
+                    self._mqtt_send(
                         self.stats_topic.format(container),
                         json.dumps(self.last_stat_containers[container]),
                         retain=False,
                     )
+
+
+def main() -> None:
+    """Run main entry for the docker2mqtt executable.
+
+    Raises
+    ------
+    Docker2MqttConfigException
+        Bad config
+    Docker2MqttConnectionException
+        If anything with the mqtt connection goes wrong
+
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--name",
+        default=socket.gethostname(),
+        help="A descriptive name for the docker being monitored (default: hostname)",
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Hostname or IP address of the MQTT broker (default: localhost)",
+    )
+    parser.add_argument(
+        "--port",
+        default=MQTT_PORT_DEFAULT,
+        help="Port or IP address of the MQTT broker (default: 1883)",
+    )
+    parser.add_argument(
+        "--client",
+        default=f"{socket.gethostname()}_{MQTT_CLIENT_ID_DEFAULT}",
+        help=f"Client Id for MQTT broker client (default: <hostname>_{MQTT_CLIENT_ID_DEFAULT})",
+    )
+    parser.add_argument(
+        "--username",
+        default=None,
+        help="Username for MQTT broker authentication (default: None)",
+    )
+    parser.add_argument(
+        "--password",
+        default=None,
+        help="Password for MQTT broker authentication (default: None)",
+    )
+    parser.add_argument(
+        "--qos",
+        default=MQTT_QOS_DEFAULT,
+        type=int,
+        help="QOS for MQTT broker authentication (default: 1)",
+        choices=range(0, 3),
+    )
+    parser.add_argument(
+        "--timeout",
+        default=MQTT_TIMEOUT_DEFAULT,
+        type=int,
+        help=f"The timeout for the MQTT connection. (default: {MQTT_TIMEOUT_DEFAULT}s)",
+    )
+    parser.add_argument(
+        "--ttl",
+        default=DESTROYED_CONTAINER_TTL_DEFAULT,
+        type=int,
+        help=f"How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. (default: {DESTROYED_CONTAINER_TTL_DEFAULT}s)",
+    )
+    parser.add_argument(
+        "--homeassistant-prefix",
+        default=HOMEASSISTANT_PREFIX_DEFAULT,
+        help=f"MQTT discovery topic prefix (default: {HOMEASSISTANT_PREFIX_DEFAULT})",
+    )
+    parser.add_argument(
+        "--topic-prefix",
+        default=MQTT_TOPIC_PREFIX_DEFAULT,
+        help=f"MQTT topic prefix (default: {MQTT_TOPIC_PREFIX_DEFAULT})",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbosity",
+        action="count",
+        default=0,
+        help="Log verbosity (default: 0 (log output disabled))",
+    )
+    parser.add_argument(
+        "--events",
+        help="Publish Events",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--stats",
+        help="Publish Stats",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--interval",
+        help=f"The number of seconds to record state and make an average (default: {STATS_RECORD_SECONDS_DEFAULT})",
+        type=int,
+        default=STATS_RECORD_SECONDS_DEFAULT,
+    )
+
+    try:
+        args = parser.parse_args()
+    except argparse.ArgumentError as e:
+        raise Docker2MqttConfigException("Cannot start due to bad config") from e
+    except argparse.ArgumentTypeError as e:
+        raise Docker2MqttConfigException(
+            "Cannot start due to bad config data type"
+        ) from e
+    log_level = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "DEBUG"][
+        args.verbosity
+    ]
+    cfg = Docker2MqttConfig(
+        {
+            "log_level": log_level,
+            "destroyed_container_ttl": args.ttl,
+            "homeassistant_prefix": args.homeassistant_prefix,
+            "docker2mqtt_hostname": args.name,
+            "mqtt_client_id": args.client,
+            "mqtt_user": args.username,
+            "mqtt_password": args.password,
+            "mqtt_host": args.host,
+            "mqtt_port": args.port,
+            "mqtt_timeout": args.timeout,
+            "mqtt_topic_prefix": args.topic_prefix,
+            "mqtt_qos": args.qos,
+            "enable_events": args.events,
+            "enable_stats": args.stats,
+            "stats_record_seconds": args.interval,
+        }
+    )
+
+    docker2mqtt = Docker2Mqtt(
+        cfg,
+        do_not_exit=False,
+    )
+
+    docker2mqtt.loop_busy()

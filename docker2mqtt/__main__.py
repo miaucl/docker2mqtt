@@ -26,8 +26,6 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 # Loggers
 main_logger = logging.getLogger("main")
-events_logger = logging.getLogger("events")
-stats_logger = logging.getLogger("main")
 
 
 if __name__ == "__main__":
@@ -43,10 +41,12 @@ if __name__ == "__main__":
                 "HOMEASSISTANT_PREFIX", HOMEASSISTANT_PREFIX_DEFAULT
             ),
             "docker2mqtt_hostname": environ.get("DOCKER2MQTT_HOSTNAME", gethostname()),
-            "mqtt_client_id": environ.get("MQTT_CLIENT_ID", MQTT_CLIENT_ID_DEFAULT),
+            "mqtt_client_id": environ.get(
+                "MQTT_CLIENT_ID", f"{gethostname()}_{MQTT_CLIENT_ID_DEFAULT}"
+            ),
             "mqtt_user": environ.get("MQTT_USER", ""),
             "mqtt_password": environ.get("MQTT_PASSWD", ""),
-            "mqtt_host": environ.get("MQTT_HOST", ""),
+            "mqtt_host": environ.get("MQTT_HOST", "localhost"),
             "mqtt_port": int(environ.get("MQTT_PORT", MQTT_PORT_DEFAULT)),
             "mqtt_timeout": int(environ.get("MQTT_TIMEOUT", MQTT_TIMEOUT_DEFAULT)),
             "mqtt_topic_prefix": environ.get(
