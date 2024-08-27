@@ -25,6 +25,7 @@ from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
     DOCKER_EVENTS_CMD,
+    DOCKER_PS_CMD,
     DOCKER_STATS_CMD,
     DOCKER_VERSION_CMD,
     HOMEASSISTANT_PREFIX_DEFAULT,
@@ -49,6 +50,8 @@ from .type_definitions import (
     ContainerDeviceEntry,
     ContainerEntry,
     ContainerEvent,
+    ContainerEventStateType,
+    ContainerEventStatusType,
     ContainerStats,
     ContainerStatsRef,
     Docker2MqttConfig,
@@ -221,6 +224,36 @@ class Docker2Mqtt:
             main_logger.error("Error while trying to connect to MQTT broker.")
             main_logger.error(str(e))
             raise Docker2MqttConnectionException from e
+
+        # Register containers with HA
+        docker_ps = subprocess.run(
+            DOCKER_PS_CMD, capture_output=True, text=True, check=False
+        )
+        for line in docker_ps.stdout.splitlines():
+            container_status = json.loads(line)
+
+            status_str: ContainerEventStatusType
+            state_str: ContainerEventStateType
+
+            if "Paused" in container_status["Status"]:
+                status_str = "paused"
+                state_str = "off"
+            elif "Up" in container_status["Status"]:
+                status_str = "running"
+                state_str = "on"
+            else:
+                status_str = "stopped"
+                state_str = "off"
+
+            if self.b_events:
+                self._register_container(
+                    {
+                        "name": container_status["Names"],
+                        "image": container_status["Image"],
+                        "status": status_str,
+                        "state": state_str,
+                    }
+                )
 
         started = False
         try:
@@ -768,7 +801,7 @@ class Docker2Mqtt:
             events_logger.debug("Events queue length: %s", docker_events_qsize)
         except Empty:
             # No data right now, just move along.
-            return
+            pass
 
         if self.b_events and docker_events_qsize > 0:
             if event_line and len(event_line) > 0:
