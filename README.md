@@ -7,6 +7,12 @@
 
 This program uses `docker events` to watch for changes in your docker containers, and `docker stats` for metrics about those containers, and delivers current status to MQTT. It will also publish Home Assistant MQTT Discovery messages so that (binary) sensors automatically show up in Home Assistant.
 
+_This is part of a family of similar tools:_
+
+* [miaucl/linux2mqtt](https://github.com/miaucl/linux2mqtt)
+* [miaucl/docker2mqtt](https://github.com/miaucl/docker2mqtt)
+* [miaucl/systemctl2mqtt](https://github.com/miaucl/systemctl2mqtt)
+
 ## Installation and Deployment
 
 It is available as python package on [pypi/docker2mqtt](https://pypi.org/p/docker2mqtt) or as a docker image on [ghcr.io/docker2mqtt](https://github.com/miaucl/docker2mqtt/pkgs/container/docker2mqtt).
@@ -104,9 +110,9 @@ Once `docker2mqtt` is collecting data and publishing it to MQTT, it's rather tri
 
 A few assumptions:
 
-- **Home Assistant is already configured to use a MQTT broker.** Setting up MQTT and HA is beyond the scope of this documentation. However, there are a lot of great tutorials on YouTube. An external broker (or as add-on) like [Mosquitto](https://mosquitto.org/) will need to be installed and the HA MQTT integration configured.
-- **The HA MQTT integration is configured to use `homeassistant` as the MQTT autodiscovery prefix.** This is the default for the integration and also the default for `linux2mqtt`. If you have changed this from the default, use the `--prefix` parameter to specify the correct one.
-- **You're not using TLS to connect to the MQTT broker.** Currently `linux2mqtt` only works with unencrypted connections. Username / password authentication can be specified with the `--username` and `--password` parameters, but TLS encryption is not yet supported.
+* **Home Assistant is already configured to use a MQTT broker.** Setting up MQTT and HA is beyond the scope of this documentation. However, there are a lot of great tutorials on YouTube. An external broker (or as add-on) like [Mosquitto](https://mosquitto.org/) will need to be installed and the HA MQTT integration configured.
+* **The HA MQTT integration is configured to use `homeassistant` as the MQTT autodiscovery prefix.** This is the default for the integration and also the default for `linux2mqtt`. If you have changed this from the default, use the `--prefix` parameter to specify the correct one.
+* **You're not using TLS to connect to the MQTT broker.** Currently `linux2mqtt` only works with unencrypted connections. Username / password authentication can be specified with the `--username` and `--password` parameters, but TLS encryption is not yet supported.
 
 After you start the service (binary) sensors should show up in Home Assistant immediately. Look for sensors that start with `(binary_)sensor.docker`. Metadata about the container will be available as attributes for events, which you can then expose using template sensors if you wish.
 
@@ -137,9 +143,9 @@ pre-commit run --all-files
 
 Following VSCode integrations may be helpful:
 
-- [ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
-- [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
-- [markdownlint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)
+* [ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
+* [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
+* [markdownlint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)
 
 ## Credits
 
