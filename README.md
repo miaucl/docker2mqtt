@@ -17,7 +17,7 @@ It is available as python package on [pypi/docker2mqtt](https://pypi.org/p/docke
 
 ```bash
 pip install docker2mqtt
-docker2mqtt --name MyDockerName --events=60 -vvvvv
+docker2mqtt --name MyDockerName --events -vvvvv
 ```
 
 Usage
@@ -85,7 +85,7 @@ You can use environment variables to control the behavior.
 | `mqtt_user`| `MQTT_USER` | | The user to send to the MQTT broker. Leave unset to disable authentication. |
 | `mqtt_password`| `MQTT_PASSWD` | | The password to send to the MQTT broker. Leave unset to disable authentication. |
 | `mqtt_timeout`| `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
-| `mqtt_topic_prefix`| `MQTT_TOPIC_PREFIX` | `ping` | The MQTT topic prefix. With the default data will be published to `ping/<hostname>`. |
+| `mqtt_topic_prefix`| `MQTT_TOPIC_PREFIX` | `docker` | The MQTT topic prefix. With the default data will be published to `docker/<hostname>`. |
 | `mqtt_qos`| `MQTT_QOS` | `1` | The MQTT QOS level |
 | `destroyed_container_ttl`| `DESTROYED_CONTAINER_TTL` | `86400` | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
 | `stats_record_seconds`| `STATS_RECORD_SECONDS` | `30` | The number of seconds to record state and make an average |

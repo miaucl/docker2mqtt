@@ -63,7 +63,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # Loggers
 main_logger = logging.getLogger("main")
 events_logger = logging.getLogger("events")
-stats_logger = logging.getLogger("main")
+stats_logger = logging.getLogger("stats")
 
 
 class Docker2Mqtt:
@@ -72,7 +72,7 @@ class Docker2Mqtt:
     Attributes
     ----------
     version
-        The version of linux2mqtt
+        The version of docker2mqtt
     cfg
         The config for docker2mqtt
     b_stats
@@ -259,10 +259,7 @@ class Docker2Mqtt:
         try:
             if self.b_events:
                 logging.info("Starting Events thread")
-                self.docker_events_t = Thread(
-                    target=self._readline_events_thread, daemon=True, name="Events"
-                )
-                self.docker_events_t.start()
+                self._start_readline_events_thread()
                 started = True
         except Exception as e:
             main_logger.error("Error while trying to start events thread.")
@@ -273,10 +270,7 @@ class Docker2Mqtt:
             if self.b_stats:
                 started = True
                 logging.info("Starting Stats thread")
-                self.docker_stats_t = Thread(
-                    target=self._readline_stats_thread, daemon=True, name="Stats"
-                )
-                self.docker_stats_t.start()
+                self._start_readline_stats_thread()
         except Exception as e:
             main_logger.error("Error while trying to start stats thread.")
             main_logger.error(str(e))
@@ -337,7 +331,7 @@ class Docker2Mqtt:
         try:
             if self.b_events and not self.docker_events_t.is_alive():
                 main_logger.warning("Restarting events thread")
-                self.docker_events_t.start()
+                self._start_readline_events_thread()
         except Exception as e:
             main_logger.error("Error while trying to restart events thread.")
             main_logger.error(str(e))
@@ -346,7 +340,7 @@ class Docker2Mqtt:
         try:
             if self.b_stats and not self.docker_stats_t.is_alive():
                 main_logger.warning("Restarting stats thread")
-                self.docker_stats_t.start()
+                self._start_readline_stats_thread()
         except Exception as e:
             main_logger.error("Error while trying to restart stats thread.")
             main_logger.error(str(e))
@@ -486,7 +480,14 @@ class Docker2Mqtt:
             main_logger.error("MQTT Disconnect: %s", str(e))
             raise Docker2MqttConnectionException() from e
 
-    def _readline_events_thread(self) -> None:
+    def _start_readline_events_thread(self) -> None:
+        """Start the events thread."""
+        self.systemctl_events_t = Thread(
+            target=self._run_readline_events_thread, daemon=True, name="Events"
+        )
+        self.systemctl_events_t.start()
+
+    def _run_readline_events_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("event-thread")
         thread_logger.setLevel(self.cfg["log_level"].upper())
@@ -509,7 +510,14 @@ class Docker2Mqtt:
             thread_logger.error("Error Running Events thread: %s", str(ex))
             thread_logger.debug("Waiting for main thread to restart this thread")
 
-    def _readline_stats_thread(self) -> None:
+    def _start_readline_stats_thread(self) -> None:
+        """Start the stats thread."""
+        self.systemctl_stats_t = Thread(
+            target=self._run_readline_stats_thread, daemon=True, name="Stats"
+        )
+        self.systemctl_stats_t.start()
+
+    def _run_readline_stats_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("stats-thread")
         thread_logger.setLevel(self.cfg["log_level"].upper())
