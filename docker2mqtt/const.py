@@ -14,6 +14,8 @@ MQTT_PORT_DEFAULT = 1883
 MQTT_TIMEOUT_DEFAULT = 30  # s
 MQTT_TOPIC_PREFIX_DEFAULT = "docker"
 MQTT_QOS_DEFAULT = 1
+CONTAINER_WHITELIST: list[str] = []
+CONTAINER_BLACKLIST: list[str] = []
 EVENTS_DEFAULT = False
 STATS_DEFAULT = False
 STATS_RECORD_SECONDS_DEFAULT = 30  # s
@@ -73,6 +75,8 @@ DEFAULT_CONFIG = Docker2MqttConfig(
         "mqtt_timeout": MQTT_TIMEOUT_DEFAULT,
         "mqtt_topic_prefix": MQTT_TOPIC_PREFIX_DEFAULT,
         "mqtt_qos": MQTT_QOS_DEFAULT,
+        "container_whitelist": CONTAINER_WHITELIST,
+        "container_blacklist": CONTAINER_BLACKLIST,
         "enable_events": EVENTS_DEFAULT,
         "enable_stats": STATS_DEFAULT,
         "stats_record_seconds": STATS_RECORD_SECONDS_DEFAULT,

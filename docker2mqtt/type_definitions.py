@@ -41,6 +41,10 @@ class Docker2MqttConfig(TypedDict):
         MQTT topic prefix
     mqtt_qos
         QOS for standard MQTT messages
+    container_whitelist
+        Whitelist the containers to monitor, if empty, everything is monitored. The entries are either match as literal strings or as regex.
+    container_blacklist
+        Blacklist the containers to monitor, takes priority over whitelist. The entries are either match as literal strings or as regex.
     enable_events
         Flag to enable event monitoring
     enable_stats
@@ -62,6 +66,8 @@ class Docker2MqttConfig(TypedDict):
     mqtt_timeout: int
     mqtt_topic_prefix: str
     mqtt_qos: int
+    container_whitelist: list[str]
+    container_blacklist: list[str]
     enable_events: bool
     enable_stats: bool
     stats_record_seconds: int

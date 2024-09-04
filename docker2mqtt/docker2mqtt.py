@@ -232,28 +232,29 @@ class Docker2Mqtt:
         for line in docker_ps.stdout.splitlines():
             container_status = json.loads(line)
 
-            status_str: ContainerEventStatusType
-            state_str: ContainerEventStateType
+            if self._filter_container(container_status["Names"]):
+                status_str: ContainerEventStatusType
+                state_str: ContainerEventStateType
 
-            if "Paused" in container_status["Status"]:
-                status_str = "paused"
-                state_str = "off"
-            elif "Up" in container_status["Status"]:
-                status_str = "running"
-                state_str = "on"
-            else:
-                status_str = "stopped"
-                state_str = "off"
+                if "Paused" in container_status["Status"]:
+                    status_str = "paused"
+                    state_str = "off"
+                elif "Up" in container_status["Status"]:
+                    status_str = "running"
+                    state_str = "on"
+                else:
+                    status_str = "stopped"
+                    state_str = "off"
 
-            if self.b_events:
-                self._register_container(
-                    {
-                        "name": container_status["Names"],
-                        "image": container_status["Image"],
-                        "status": status_str,
-                        "state": state_str,
-                    }
-                )
+                if self.b_events:
+                    self._register_container(
+                        {
+                            "name": container_status["Names"],
+                            "image": container_status["Image"],
+                            "status": status_str,
+                            "state": state_str,
+                        }
+                    )
 
         started = False
         try:
@@ -482,10 +483,10 @@ class Docker2Mqtt:
 
     def _start_readline_events_thread(self) -> None:
         """Start the events thread."""
-        self.systemctl_events_t = Thread(
+        self.docker_events_t = Thread(
             target=self._run_readline_events_thread, daemon=True, name="Events"
         )
-        self.systemctl_events_t.start()
+        self.docker_events_t.start()
 
     def _run_readline_events_thread(self) -> None:
         """Run docker events and continually read lines from it."""
@@ -512,10 +513,10 @@ class Docker2Mqtt:
 
     def _start_readline_stats_thread(self) -> None:
         """Start the stats thread."""
-        self.systemctl_stats_t = Thread(
+        self.docker_stats_t = Thread(
             target=self._run_readline_stats_thread, daemon=True, name="Stats"
         )
-        self.systemctl_stats_t.start()
+        self.docker_stats_t.start()
 
     def _run_readline_stats_thread(self) -> None:
         """Run docker events and continually read lines from it."""
@@ -690,6 +691,56 @@ class Docker2Mqtt:
             retain=True,
         )
 
+    def _match_container(self, container: str, to_check: str) -> bool:
+        """Match a container to a value.
+
+        Parameters
+        ----------
+        container
+            The container to match
+        to_check
+            The string to check it with
+
+        Returns
+        -------
+        bool
+            Whether the container matches the string
+
+        """
+        return (
+            container in (to_check) or re.compile(to_check).match(container) is not None
+        )
+
+    def _filter_container(self, container: str) -> bool:
+        """Filter a container to whitelist and blacklist.
+
+        Parameters
+        ----------
+        container
+            The container to match
+
+        Returns
+        -------
+        bool
+            Whether the container should be considered
+
+        """
+        if len(self.cfg["container_whitelist"]) > 0:
+            for to_check in self.cfg["container_whitelist"]:
+                if self._match_container(container, to_check):
+                    events_logger.debug(
+                        "Match container '%s' with whitelist entry: %s",
+                        container,
+                        to_check,
+                    )
+                    break
+            else:
+                return False
+        for to_check in self.cfg["container_blacklist"]:
+            if self._match_container(container, to_check):
+                return False
+        return True
+
     def _stat_to_value(
         self, stat: str, container: str, matches: re.Match[str] | None
     ) -> Tuple[float, float]:
@@ -820,6 +871,10 @@ class Docker2Mqtt:
                         return
 
                     container: str = event["Actor"]["Attributes"]["name"]
+                    if not self._filter_container(container):
+                        events_logger.debug("Skip container: %s", container)
+                        return
+
                     events_logger.debug(
                         "Have an event to process for Container name: %s", container
                     )
@@ -946,6 +1001,10 @@ class Docker2Mqtt:
                     # print("loaded json")
                     # print(stat)
                     container: str = stat["Name"]
+                    if not self._filter_container(container):
+                        stats_logger.debug("Skip container: %s", container)
+                        return
+
                     stats_logger.debug(
                         "Have a Stat to process for container: %s", container
                     )
@@ -1188,6 +1247,26 @@ def main() -> None:
         help="Log verbosity (default: 0 (log output disabled))",
     )
     parser.add_argument(
+        "--whitelist",
+        help="Container whitelist",
+        type=str,
+        action="append",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="CONTAINER",
+    )
+    parser.add_argument(
+        "--blacklist",
+        help="Container blacklist",
+        type=str,
+        action="append",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="CONTAINER",
+    )
+    parser.add_argument(
         "--events",
         help="Publish Events",
         action="store_true",
@@ -1229,6 +1308,8 @@ def main() -> None:
             "mqtt_timeout": args.timeout,
             "mqtt_topic_prefix": args.topic_prefix,
             "mqtt_qos": args.qos,
+            "container_whitelist": args.whitelist or [],
+            "container_blacklist": args.blacklist or [],
             "enable_events": args.events,
             "enable_stats": args.stats,
             "stats_record_seconds": args.interval,
