@@ -31,6 +31,9 @@ main_logger = logging.getLogger("main")
 if __name__ == "__main__":
     # Env config
 
+    whitelist = environ.get("CONTAINER_WHITELIST", "")
+    blacklist = environ.get("CONTAINER_BLACKLIST", "")
+
     cfg = Docker2MqttConfig(
         {
             "log_level": environ.get("LOG_LEVEL", LOG_LEVEL_DEFAULT),
@@ -53,10 +56,8 @@ if __name__ == "__main__":
                 "MQTT_TOPIC_PREFIX", MQTT_TOPIC_PREFIX_DEFAULT
             ),
             "mqtt_qos": int(environ.get("MQTT_QOS", MQTT_QOS_DEFAULT)),
-            "container_whitelist": environ.get("CONTAINER_WHITELIST", "").split(",")
-            or [],
-            "container_blacklist": environ.get("CONTAINER_BLACKLIST", "").split(",")
-            or [],
+            "container_whitelist": whitelist.split(",") if len(whitelist) > 0 else [],
+            "container_blacklist": blacklist.split(",") if len(blacklist) > 0 else [],
             "enable_events": bool(environ.get("EVENTS", EVENTS_DEFAULT)),
             "enable_stats": bool(environ.get("STATS", STATS_DEFAULT)),
             "stats_record_seconds": int(
