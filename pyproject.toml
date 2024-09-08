@@ -136,6 +136,7 @@ split-on-trailing-comma = false
 
 # Allow for main entry & scripts to write to stdout
 "docker2mqtt/__main__.py" = ["T201"]
+"docker2mqtt/__docker__.py" = ["T201"]
 "script/*" = ["T20"]
 
 [tool.ruff.lint.mccabe]
