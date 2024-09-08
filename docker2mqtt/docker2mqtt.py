@@ -1181,6 +1181,9 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__VERSION__}"
+    )
+    parser.add_argument(
         "--name",
         default=socket.gethostname(),
         help="A descriptive name for the docker being monitored (default: hostname)",
