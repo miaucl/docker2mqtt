@@ -888,14 +888,15 @@ class Docker2Mqtt:
                             )
                             del self.pending_destroy_operations[container]
 
-                        self._register_container(
-                            {
-                                "name": container,
-                                "image": event["from"],
-                                "status": "created",
-                                "state": "off",
-                            }
-                        )
+                        if self._filter_container(container):
+                            self._register_container(
+                                {
+                                    "name": container,
+                                    "image": event["from"],
+                                    "status": "created",
+                                    "state": "off",
+                                }
+                            )
 
                     elif event["status"] == "destroy":
                         # Add this container to pending_destroy_operations.
@@ -924,16 +925,21 @@ class Docker2Mqtt:
                             "Container %s renamed to %s.", old_name, container
                         )
                         self._unregister_container(old_name)
-                        self._register_container(
-                            {
-                                "name": container,
-                                "image": self.known_event_containers[old_name]["image"],
-                                "status": self.known_event_containers[old_name][
-                                    "status"
-                                ],
-                                "state": self.known_event_containers[old_name]["state"],
-                            }
-                        )
+                        if self._filter_container(container):
+                            self._register_container(
+                                {
+                                    "name": container,
+                                    "image": self.known_event_containers[old_name][
+                                        "image"
+                                    ],
+                                    "status": self.known_event_containers[old_name][
+                                        "status"
+                                    ],
+                                    "state": self.known_event_containers[old_name][
+                                        "state"
+                                    ],
+                                }
+                            )
                         del self.known_event_containers[old_name]
 
                     elif event["status"] == "start":
