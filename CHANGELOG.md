@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.0.3
+
+* Transform the mqtt port cli arg to int as a str is not accepted by the paho.mqtt library
+* Fix the container filter not only at startup but also at runtime
+
 ## 2.0.2
 
 * Add version cli options to display package version
