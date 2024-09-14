@@ -35,6 +35,7 @@ from .exceptions import (
     Docker2MqttException,
     Docker2MqttStatsException,
 )
+from .helpers import clean_for_discovery
 from .type_definitions import (
     ContainerDeviceEntry,
     ContainerEntry,
@@ -48,6 +49,7 @@ from .type_definitions import (
 
 __all__ = [
     "Docker2Mqtt",
+    "clean_for_discovery",
     "ContainerEvent",
     "ContainerStats",
     "ContainerStatsRef",
