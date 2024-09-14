@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.5
+
+* Re-release due to bad deploy pipeline
+
 ## 2.0.4
 
 * Update the discovery jsons for home assistant
