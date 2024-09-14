@@ -20,6 +20,8 @@ from typing import Any, Dict, Tuple
 
 import paho.mqtt.client
 
+from docker2mqtt.helpers import clean_for_discovery
+
 from . import __VERSION__
 from .const import (
     ANSI_ESCAPE,
@@ -606,7 +608,9 @@ class Docker2Mqtt:
             }
         )
         self._mqtt_send(
-            registration_topic, json.dumps(registration_packet), retain=True
+            registration_topic,
+            json.dumps(clean_for_discovery(registration_packet)),
+            retain=True,
         )
         self._mqtt_send(
             events_topic,
@@ -640,7 +644,9 @@ class Docker2Mqtt:
                 }
             )
             self._mqtt_send(
-                registration_topic, json.dumps(registration_packet), retain=True
+                registration_topic,
+                json.dumps(clean_for_discovery(registration_packet)),
+                retain=True,
             )
             self._mqtt_send(
                 stats_topic,
