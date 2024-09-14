@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.4
+
+* Update the discovery jsons for home assistant
+
 ## 2.0.3
 
 * Transform the mqtt port cli arg to int as a str is not accepted by the paho.mqtt library
