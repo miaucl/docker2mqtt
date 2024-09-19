@@ -51,20 +51,11 @@ jobs:
 
       - name: Check tag in package
         run: |
-          if ! grep -q "__VERSION__ = \"$TAG_VERSION\"" ./docker2mqtt/__init__.py; then
+          if ! grep -q "__version__ = \"$TAG_VERSION\"" ./docker2mqtt/__init__.py; then
             echo "Error: Tag version $TAG_VERSION not found in the package."
             exit 1
           else
             echo "Success: Tag version $TAG_VERSION found in package."
-          fi
-
-      - name: Check tag in setup.cfg
-        run: |
-          if ! grep -q "version = $TAG_VERSION" setup.cfg; then
-            echo "Error: Tag version $TAG_VERSION not found in the setup.cfg."
-            exit 1
-          else
-            echo "Success: Tag version $TAG_VERSION found in setup.cfg."
           fi
 
       - name: Check changelog entry

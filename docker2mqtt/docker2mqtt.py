@@ -22,7 +22,7 @@ import paho.mqtt.client
 
 from docker2mqtt.helpers import clean_for_discovery
 
-from . import __VERSION__
+from . import __version__
 from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
@@ -118,7 +118,7 @@ class Docker2Mqtt:
     """
 
     # Version
-    version: str = __VERSION__
+    version: str = __version__
 
     cfg: Docker2MqttConfig
 
@@ -1193,7 +1193,7 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__VERSION__}"
+        "--version", action="version", version=f"%(prog)s {__version__}"
     )
     parser.add_argument(
         "--name",
