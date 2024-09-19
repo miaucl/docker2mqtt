@@ -16,7 +16,7 @@ from subprocess import PIPE, Popen
 import sys
 from threading import Thread
 from time import sleep, time
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import paho.mqtt.client
 
@@ -127,10 +127,10 @@ class Docker2Mqtt:
 
     docker_events: Queue[str] = Queue(maxsize=MAX_QUEUE_SIZE)
     docker_stats: Queue[str] = Queue(maxsize=MAX_QUEUE_SIZE)
-    known_event_containers: Dict[str, ContainerEvent] = {}
-    known_stat_containers: Dict[str, ContainerStatsRef] = {}
-    last_stat_containers: Dict[str, ContainerStats | Dict[str, Any]] = {}
-    pending_destroy_operations: Dict[str, float] = {}
+    known_event_containers: dict[str, ContainerEvent] = {}
+    known_stat_containers: dict[str, ContainerStatsRef] = {}
+    last_stat_containers: dict[str, ContainerStats | dict[str, Any]] = {}
+    pending_destroy_operations: dict[str, float] = {}
 
     mqtt: paho.mqtt.client.Client
 
@@ -203,7 +203,7 @@ class Docker2Mqtt:
         try:
             # Setup MQTT
             self.mqtt = paho.mqtt.client.Client(
-                callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore
+                callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore[attr-defined, call-arg]
                 client_id=self.cfg["mqtt_client_id"],
             )
             self.mqtt.username_pw_set(
@@ -749,7 +749,7 @@ class Docker2Mqtt:
 
     def _stat_to_value(
         self, stat: str, container: str, matches: re.Match[str] | None
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Convert a regex matches to two values, i.e. used and limit for memory.
 
         Parameters

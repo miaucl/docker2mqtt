@@ -1,13 +1,13 @@
 """docker2mqtt helpers."""
 
-from typing import Dict, Union
+from typing import Union
 
 from .type_definitions import ContainerEntry
 
 
 def clean_for_discovery(
     val: ContainerEntry,
-) -> Dict[str, Union[str, int, float, object]]:
+) -> dict[str, Union[str, int, float, object]]:
     """Cleanup a typed dict for home assistant discovery, which is quite picky and does not like empty of None values.
 
     Parameters

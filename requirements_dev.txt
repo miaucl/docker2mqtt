@@ -1,6 +1,7 @@
 paho-mqtt
 types-paho-mqtt
-mypy>=1.8.0
+mypy
+pydantic
 pre-commit>=3.6.1
 python-dotenv>=1.0.1
 ruff~=0.6
