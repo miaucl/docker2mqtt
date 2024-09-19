@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.1.0
+
+* Update version package identifier and bump setuptools
+* Fix mypy setup
+
 ## 2.0.5
 
 * Re-release due to bad deploy pipeline
