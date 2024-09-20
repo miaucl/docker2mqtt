@@ -46,6 +46,7 @@ from .exceptions import (
     Docker2MqttConfigException,
     Docker2MqttConnectionException,
     Docker2MqttEventsException,
+    Docker2MqttException,
     Docker2MqttStatsException,
 )
 from .type_definitions import (
@@ -222,10 +223,10 @@ class Docker2Mqtt:
             self._mqtt_send(self.status_topic, "online", retain=True)
             self._mqtt_send(self.version_topic, self.version, retain=True)
 
-        except paho.mqtt.client.WebsocketConnectionError as e:
-            main_logger.error("Error while trying to connect to MQTT broker.")
-            main_logger.error(str(e))
-            raise Docker2MqttConnectionException from e
+        except paho.mqtt.client.WebsocketConnectionError as ex:
+            main_logger.exception("Error while trying to connect to MQTT broker.")
+            main_logger.debug(ex)
+            raise Docker2MqttConnectionException from ex
 
         # Register containers with HA
         docker_ps = subprocess.run(
@@ -264,20 +265,20 @@ class Docker2Mqtt:
                 logging.info("Starting Events thread")
                 self._start_readline_events_thread()
                 started = True
-        except Exception as e:
-            main_logger.error("Error while trying to start events thread.")
-            main_logger.error(str(e))
-            raise Docker2MqttConfigException from e
+        except Exception as ex:
+            main_logger.exception("Error while trying to start events thread.")
+            main_logger.debug(ex)
+            raise Docker2MqttConfigException from ex
 
         try:
             if self.b_stats:
                 started = True
                 logging.info("Starting Stats thread")
                 self._start_readline_stats_thread()
-        except Exception as e:
-            main_logger.error("Error while trying to start stats thread.")
-            main_logger.error(str(e))
-            raise Docker2MqttConfigException from e
+        except Exception as ex:
+            main_logger.exception("Error while trying to start stats thread.")
+            main_logger.debug(ex)
+            raise Docker2MqttConfigException from ex
 
         if started is False:
             logging.critical("Nothing started, check your config!")
@@ -307,8 +308,9 @@ class Docker2Mqtt:
         main_logger.warning("Shutting down gracefully.")
         try:
             self._mqtt_disconnect()
-        except Docker2MqttConnectionException as e:
-            main_logger.error("MQTT Cleanup Failed: %s", str(e))
+        except Docker2MqttConnectionException as ex:
+            main_logger.exception("MQTT Cleanup Failed")
+            main_logger.debug(ex)
             main_logger.info("Ignoring cleanup error and exiting...")
 
     def loop(self) -> None:
@@ -335,19 +337,19 @@ class Docker2Mqtt:
             if self.b_events and not self.docker_events_t.is_alive():
                 main_logger.warning("Restarting events thread")
                 self._start_readline_events_thread()
-        except Exception as e:
-            main_logger.error("Error while trying to restart events thread.")
-            main_logger.error(str(e))
-            raise Docker2MqttConfigException from e
+        except Exception as ex:
+            main_logger.exception("Error while trying to restart events thread.")
+            main_logger.debug(ex)
+            raise Docker2MqttConfigException from ex
 
         try:
             if self.b_stats and not self.docker_stats_t.is_alive():
                 main_logger.warning("Restarting stats thread")
                 self._start_readline_stats_thread()
-        except Exception as e:
-            main_logger.error("Error while trying to restart stats thread.")
-            main_logger.error(str(e))
-            raise Docker2MqttConfigException from e
+        except Exception as ex:
+            main_logger.exception("Error while trying to restart stats thread.")
+            main_logger.debug(ex)
+            raise Docker2MqttConfigException from ex
 
     def loop_busy(self, raise_known_exceptions: bool = False) -> None:
         """Start the loop (blocking).
@@ -373,14 +375,14 @@ class Docker2Mqtt:
                 self.loop()
             except Docker2MqttEventsException as ex:
                 if raise_known_exceptions:
-                    raise ex
+                    raise ex  # noqa: TRY201
                 else:
                     main_logger.warning(
                         "Do not raise due to raise_known_exceptions=False: %s", str(ex)
                     )
             except Docker2MqttStatsException as ex:
                 if raise_known_exceptions:
-                    raise ex
+                    raise ex  # noqa: TRY201
                 else:
                     main_logger.warning(
                         "Do not raise due to raise_known_exceptions=False: %s", str(ex)
@@ -422,7 +424,7 @@ class Docker2Mqtt:
                 # Extract the version information from the output
                 return result.stdout.strip()
             else:
-                raise Exception(f"Error: {result.stderr.strip()}")
+                raise Docker2MqttException(f"Error: {result.stderr.strip()}")
         except FileNotFoundError:
             return "Docker is not installed or not found in PATH."
 
@@ -450,9 +452,10 @@ class Docker2Mqtt:
                 topic, payload=payload, qos=self.cfg["mqtt_qos"], retain=retain
             )
 
-        except paho.mqtt.client.WebsocketConnectionError as e:
-            main_logger.error("MQTT Publish Failed: %s", str(e))
-            raise Docker2MqttConnectionException() from e
+        except paho.mqtt.client.WebsocketConnectionError as ex:
+            main_logger.exception("MQTT Publish Failed")
+            main_logger.debug(ex)
+            raise Docker2MqttConnectionException() from ex
 
     def _mqtt_disconnect(self) -> None:
         """Make sure we send our last_will message.
@@ -479,9 +482,12 @@ class Docker2Mqtt:
             self.mqtt.disconnect()
             sleep(1)
             self.mqtt.loop_stop()
-        except paho.mqtt.client.WebsocketConnectionError as e:
-            main_logger.error("MQTT Disconnect: %s", str(e))
-            raise Docker2MqttConnectionException() from e
+        except paho.mqtt.client.WebsocketConnectionError as ex:
+            main_logger.exception(
+                "MQTT Disconnect",
+            )
+            main_logger.debug(ex)
+            raise Docker2MqttConnectionException() from ex
 
     def _start_readline_events_thread(self) -> None:
         """Start the events thread."""
@@ -499,18 +505,17 @@ class Docker2Mqtt:
             thread_logger.debug("Command: %s", DOCKER_EVENTS_CMD)
             with Popen(DOCKER_EVENTS_CMD, stdout=PIPE, text=True) as process:
                 while True:
-                    if process.stdout:
-                        line = ANSI_ESCAPE.sub("", process.stdout.readline())
-                        if line == "" and process.poll() is not None:
-                            break
-                        if line:
-                            thread_logger.debug("Read docker event line: %s", line)
-                            self.docker_events.put(line.strip())
-                        _rc = process.poll()
-                    else:
-                        raise ReferenceError("process stdout is undefined")
+                    assert process.stdout
+                    line = ANSI_ESCAPE.sub("", process.stdout.readline())
+                    if line == "" and process.poll() is not None:
+                        break
+                    if line:
+                        thread_logger.debug("Read docker event line: %s", line)
+                        self.docker_events.put(line.strip())
+                    _rc = process.poll()
         except Exception as ex:
-            thread_logger.error("Error Running Events thread: %s", str(ex))
+            thread_logger.exception("Error Running Events thread")
+            thread_logger.debug(ex)
             thread_logger.debug("Waiting for main thread to restart this thread")
 
     def _start_readline_stats_thread(self) -> None:
@@ -529,18 +534,17 @@ class Docker2Mqtt:
             thread_logger.debug("Command: %s", DOCKER_STATS_CMD)
             with Popen(DOCKER_STATS_CMD, stdout=PIPE, text=True) as process:
                 while True:
-                    if process.stdout:
-                        line = ANSI_ESCAPE.sub("", process.stdout.readline())
-                        if line == "" and process.poll() is not None:
-                            break
-                        if line:
-                            thread_logger.debug("Read docker stat line: %s", line)
-                            self.docker_stats.put(line.strip())
-                        _rc = process.poll()
-                    else:
-                        raise ReferenceError("process stdout is undefined")
+                    assert process.stdout
+                    line = ANSI_ESCAPE.sub("", process.stdout.readline())
+                    if line == "" and process.poll() is not None:
+                        break
+                    if line:
+                        thread_logger.debug("Read docker stat line: %s", line)
+                        self.docker_stats.put(line.strip())
+                    _rc = process.poll()
         except Exception as ex:
-            thread_logger.error("Error Running Stats thread: %s", str(ex))
+            thread_logger.exception("Error Running Stats thread")
+            thread_logger.debug(ex)
             thread_logger.debug("Waiting for main thread to restart this thread")
 
     def _device_definition(
@@ -961,8 +965,9 @@ class Docker2Mqtt:
                         events_logger.debug("Unknown event: %s", event["status"])
 
                 except Exception as ex:
-                    events_logger.error("Error parsing line: %s", event_line)
-                    events_logger.error("Error of parsed line: %s", str(ex))
+                    events_logger.exception("Error parsing line: %s", event_line)
+                    events_logger.exception("Error of parsed line")
+                    events_logger.debug(ex)
                     raise Docker2MqttEventsException(
                         f"Error parsing line: {event_line}"
                     ) from ex
@@ -1164,8 +1169,9 @@ class Docker2Mqtt:
                         )
 
                 except Exception as ex:
-                    stats_logger.error("Error parsing line: %s", stat_line)
-                    stats_logger.error("Error of parsed line: %s", str(ex))
+                    stats_logger.exception("Error parsing line: %s", stat_line)
+                    stats_logger.exception("Error of parsed line")
+                    stats_logger.debug(ex)
                     stats_logger.info(":".join(hex(ord(x))[2:] for x in stat_line))
                     raise Docker2MqttStatsException(
                         f"Error parsing line: {stat_line}"

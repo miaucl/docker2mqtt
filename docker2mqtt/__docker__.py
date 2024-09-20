@@ -71,6 +71,7 @@ if __name__ == "__main__":
         docker2mqtt.loop_busy()
 
     except Exception as ex:
-        main_logger.info("Error occurred, printing relevant information and exiting...")
-        main_logger.error("Error processing: %s", str(ex))
+        main_logger.exception(
+            "Error occurred, printing relevant information and exiting..."
+        )
         print(ex)
