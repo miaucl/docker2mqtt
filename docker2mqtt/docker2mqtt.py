@@ -254,6 +254,7 @@ class Docker2Mqtt:
                         {
                             "name": container_status["Names"],
                             "image": container_status["Image"],
+                            "host": cfg['docker2mqtt_hostname'],
                             "status": status_str,
                             "state": state_str,
                         }
