@@ -82,6 +82,8 @@ class ContainerEvent(TypedDict):
         The name of the container
     image
         The image the container is running
+    host
+        The host the container is running on
     status
         The docker status the container is in
     state
@@ -91,6 +93,7 @@ class ContainerEvent(TypedDict):
 
     name: str
     image: str
+    host: str | None
     status: ContainerEventStatusType
     state: ContainerEventStateType
 
