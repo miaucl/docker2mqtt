@@ -93,7 +93,7 @@ class ContainerEvent(TypedDict):
 
     name: str
     image: str
-    host: str | None
+    host: str
     status: ContainerEventStatusType
     state: ContainerEventStateType
 
