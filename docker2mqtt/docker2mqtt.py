@@ -31,6 +31,7 @@ from .const import (
     DOCKER_STATS_CMD,
     DOCKER_VERSION_CMD,
     HOMEASSISTANT_PREFIX_DEFAULT,
+    HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
     INVALID_HA_TOPIC_CHARS,
     MAX_QUEUE_SIZE,
     MQTT_CLIENT_ID_DEFAULT,
@@ -564,9 +565,15 @@ class Docker2Mqtt:
 
         """
         container = container_entry["name"]
+        if not self.cfg["homeassistant_single_device"]:
+            return {
+                "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}_{container}",
+                "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()} {container}",
+                "model": f"{platform.system()} {platform.machine()} {self.docker_version}",
+            }
         return {
-            "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}_{container}",
-            "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()} {container}",
+            "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}",
+            "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()}",
             "model": f"{platform.system()} {platform.machine()} {self.docker_version}",
         }
 
@@ -1257,6 +1264,11 @@ def main() -> None:
         help=f"MQTT discovery topic prefix (default: {HOMEASSISTANT_PREFIX_DEFAULT})",
     )
     parser.add_argument(
+        "--homeassistant-single-device",
+        action="store_true",
+        help=f"Group all entities by a single device in Home Assistant instead of one device per entity (default: {HOMEASSISTANT_SINGLE_DEVICE_DEFAULT})",
+    )
+    parser.add_argument(
         "--topic-prefix",
         default=MQTT_TOPIC_PREFIX_DEFAULT,
         help=f"MQTT topic prefix (default: {MQTT_TOPIC_PREFIX_DEFAULT})",
@@ -1321,6 +1333,7 @@ def main() -> None:
             "log_level": log_level,
             "destroyed_container_ttl": args.ttl,
             "homeassistant_prefix": args.homeassistant_prefix,
+            "homeassistant_single_device": args.homeassistant_single_device,
             "docker2mqtt_hostname": args.name,
             "mqtt_client_id": args.client,
             "mqtt_user": args.username,

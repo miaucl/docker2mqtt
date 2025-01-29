@@ -85,6 +85,7 @@ You can use environment variables to control the behavior.
 | `log_level`| `LOG_LEVEL` | `INFO` | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
 | `docker2mqtt_hostname`| `DOCKER2MQTT_HOSTNAME` | docker2mqtt Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
 | `homeassistant_prefix`| `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
+| `homeassistant_single_device` | `HOMEASSISTANT_SINGLE_DEVICE` | `false` | Group all entities by a single device in Home Assistant instead of one device per entity. |
 | `mqtt_client_id`| `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
 | `mqtt_host`| `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
 | `mqtt_port`| `MQTT_PORT` | `1883` | The port on the broker to connect to. |
