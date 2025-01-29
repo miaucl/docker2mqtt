@@ -9,6 +9,7 @@ from .const import (
     DESTROYED_CONTAINER_TTL_DEFAULT,
     EVENTS_DEFAULT,
     HOMEASSISTANT_PREFIX_DEFAULT,
+    HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
     LOG_LEVEL_DEFAULT,
     MQTT_CLIENT_ID_DEFAULT,
     MQTT_PORT_DEFAULT,
@@ -42,6 +43,11 @@ if __name__ == "__main__":
             ),
             "homeassistant_prefix": environ.get(
                 "HOMEASSISTANT_PREFIX", HOMEASSISTANT_PREFIX_DEFAULT
+            ),
+            "homeassistant_single_device": bool(
+                environ.get(
+                    "HOMEASSISTANT_SINGLE_DEVICE", HOMEASSISTANT_SINGLE_DEVICE_DEFAULT
+                )
             ),
             "docker2mqtt_hostname": environ.get("DOCKER2MQTT_HOSTNAME", gethostname()),
             "mqtt_client_id": environ.get(

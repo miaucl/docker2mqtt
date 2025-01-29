@@ -23,6 +23,8 @@ class Docker2MqttConfig(TypedDict):
         How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires.
     homeassistant_prefix
         MQTT discovery topic prefix
+    homeassistant_single_device
+        Group all entities by a single device in Home Assistant instead of one device per entity
     docker2mqtt_hostname
         A descriptive name for the docker being monitored
     mqtt_client_id
@@ -57,6 +59,7 @@ class Docker2MqttConfig(TypedDict):
     log_level: str
     destroyed_container_ttl: int
     homeassistant_prefix: str
+    homeassistant_single_device: bool
     docker2mqtt_hostname: str
     mqtt_client_id: str
     mqtt_user: str
