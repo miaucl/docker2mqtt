@@ -150,11 +150,9 @@ Following VSCode integrations may be helpful:
 * [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
 * [markdownlint](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint)
 
-### Releasing
+A _final version_ can only be released from the `master` branch. To pass the gates of the `publish` workflow, the version must match in both the `tag` and `docker2mqtt/__init__.py`.
 
-It is only possible to release a _final version_ on the `master` branch. For it to pass the gates of the `publish` workflow, it must have the same version in the `tag`, the `setup.cfg`, the `bring_api/__init__.py` and an entry in the `CHANGELOG.md` file.
-
-To release a prerelease version, no changelog entry is required, but it can only happen on a feature branch (**not** `master` branch). Also, prerelease versions are marked as such in the github release page.
+To release a prerelease version, it must be done from a feature branch (**not** `master`). Prerelease versions are explicitly marked as such on the GitHub release page.
 
 ## Credits
 

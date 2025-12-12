@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## DEPRECATED
+
+ This changelog is no longer maintained and will not be updated in future releases. Please refer to the [release notes](https://github.com/miaucl/docker2mqtt/releases/latest) on GitHub for the latest changes.
+
 ## 2.2.0
 
 * Add option to group all entities into a single device in home assistant
