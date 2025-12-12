@@ -81,25 +81,25 @@ services:
 You can use environment variables to control the behavior.
 
 | Config | Env Variable | Default | Description |
-|--------|--------------|---------|-------------|
-| `log_level`| `LOG_LEVEL` | `INFO` | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
-| `docker2mqtt_hostname`| `DOCKER2MQTT_HOSTNAME` | docker2mqtt Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
-| `homeassistant_prefix`| `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
+| -------- | -------------- | --------- | ------------- |
+| `log_level` | `LOG_LEVEL` | `INFO` | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
+| `docker2mqtt_hostname` | `DOCKER2MQTT_HOSTNAME` | docker2mqtt Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
+| `homeassistant_prefix` | `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
 | `homeassistant_single_device` | `HOMEASSISTANT_SINGLE_DEVICE` | `false` | Group all entities by a single device in Home Assistant instead of one device per entity. |
-| `mqtt_client_id`| `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
-| `mqtt_host`| `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
-| `mqtt_port`| `MQTT_PORT` | `1883` | The port on the broker to connect to. |
-| `mqtt_user`| `MQTT_USER` | | The user to send to the MQTT broker. Leave unset to disable authentication. |
-| `mqtt_password`| `MQTT_PASSWD` | | The password to send to the MQTT broker. Leave unset to disable authentication. |
-| `mqtt_timeout`| `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
-| `mqtt_topic_prefix`| `MQTT_TOPIC_PREFIX` | `docker` | The MQTT topic prefix. With the default data will be published to `docker/<hostname>`. |
-| `mqtt_qos`| `MQTT_QOS` | `1` | The MQTT QOS level |
+| `mqtt_client_id` | `MQTT_CLIENT_ID` | `mqtt2discord` | The client id to send to the MQTT broker. |
+| `mqtt_host` | `MQTT_HOST` | `localhost` | The MQTT broker to connect to. |
+| `mqtt_port` | `MQTT_PORT` | `1883` | The port on the broker to connect to. |
+| `mqtt_user` | `MQTT_USER` | | The user to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_password` | `MQTT_PASSWD` | | The password to send to the MQTT broker. Leave unset to disable authentication. |
+| `mqtt_timeout` | `MQTT_TIMEOUT` | `30` | The timeout for the MQTT connection. |
+| `mqtt_topic_prefix` | `MQTT_TOPIC_PREFIX` | `docker` | The MQTT topic prefix. With the default data will be published to `docker/<hostname>`. |
+| `mqtt_qos` | `MQTT_QOS` | `1` | The MQTT QOS level |
 | `container_whitelist` | `CONTAINER_WHITELIST` | | Define a whitelist for containers to consider, if empty, everything is monitored. The entries are either match as literal strings or as regex. |
 | `container_blacklist` | `CONTAINER_BLACKLIST` | | Define a blacklist for containers to consider, takes priority over whitelist. The entries are either match as literal strings or as regex. |
-| `destroyed_container_ttl`| `DESTROYED_CONTAINER_TTL` | `86400` | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
-| `stats_record_seconds`| `STATS_RECORD_SECONDS` | `30` | The number of seconds to record state and make an average |
-| `enable_events`| `EVENTS` | `0` | 1 Or 0 for processing events |
-| `enable_stats`| `STATS` | `0` | 1 Or 0 for processing statistics |
+| `destroyed_container_ttl` | `DESTROYED_CONTAINER_TTL` | `86400` | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
+| `stats_record_seconds` | `STATS_RECORD_SECONDS` | `30` | The number of seconds to record state and make an average |
+| `enable_events` | `EVENTS` | `0` | 1 Or 0 for processing events |
+| `enable_stats` | `STATS` | `0` | 1 Or 0 for processing statistics |
 
 ## Consuming The Data
 
