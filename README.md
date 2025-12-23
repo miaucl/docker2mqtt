@@ -69,8 +69,8 @@ services:
       - MQTT_HOST=mosquitto
       - MQTT_USER=username
       - MQTT_PASSWD=password
-      - EVENTS=1
-      - STATS=1
+      - EVENTS=true
+      - STATS=true
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -98,8 +98,8 @@ You can use environment variables to control the behavior.
 | `container_blacklist` | `CONTAINER_BLACKLIST` | | Define a blacklist for containers to consider, takes priority over whitelist. The entries are either match as literal strings or as regex. |
 | `destroyed_container_ttl` | `DESTROYED_CONTAINER_TTL` | `86400` | How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. |
 | `stats_record_seconds` | `STATS_RECORD_SECONDS` | `30` | The number of seconds to record state and make an average |
-| `enable_events` | `EVENTS` | `0` | 1 Or 0 for processing events |
-| `enable_stats` | `STATS` | `0` | 1 Or 0 for processing statistics |
+| `enable_events` | `EVENTS` | `<none>` | Set to enable and leave out to disable processing events |
+| `enable_stats` | `STATS` | `<none>` | Set to enable and leave out to disable processing statistics |
 
 ## Consuming The Data
 
