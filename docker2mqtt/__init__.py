@@ -1,6 +1,6 @@
 """docker2mqtt package."""
 
-__version__ = "2.4.3a1"
+__version__ = "2.4.3a2"
 
 from .const import (
     ANSI_ESCAPE,

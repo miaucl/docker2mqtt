@@ -197,7 +197,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
     - name: Upload artifact signatures to GitHub Release
-      if: ${{ steps.check_prerelease.outputs.prerelease == 'true' }}
+      if: ${{ steps.check_prerelease.outputs.prerelease == 'false' }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
       # Upload to GitHub Release using the `gh` CLI.

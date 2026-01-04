@@ -228,9 +228,11 @@ class Docker2Mqtt:
             self.mqtt.on_connect = self._on_connect
             self.mqtt.on_connect_fail = self._on_connect_fail
             self.mqtt.on_disconnect = self._on_disconnect
+            main_logger.warning("ABOUT TO CALL connect_async()")
             self.mqtt.connect_async(
                 self.cfg["mqtt_host"], self.cfg["mqtt_port"], self.cfg["mqtt_timeout"]
             )
+            main_logger.warning("RETURNED FROM connect_async()")
             self.mqtt.loop_start()
 
         except paho.mqtt.client.WebsocketConnectionError as ex:
