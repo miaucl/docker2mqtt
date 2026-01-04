@@ -65,9 +65,9 @@ from .type_definitions import (
     Docker2MqttConfig,
 )
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+MEM_RE = re.compile(
+    r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+/\s+"
+    r"(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
 )
 
 # Loggers
@@ -608,7 +608,8 @@ class Docker2Mqtt:
                     if line == "" and process.poll() is not None:
                         break
                     if line:
-                        thread_logger.debug("Read docker event line: %s", line)
+                        if thread_logger.isEnabledFor(logging.DEBUG):
+                            thread_logger.debug("Read docker event line: %s", line)
                         self.docker_events.put(line.strip())
                     _rc = process.poll()
         except Exception as ex:
@@ -639,7 +640,8 @@ class Docker2Mqtt:
                     if line == "" and process.poll() is not None:
                         break
                     if line:
-                        thread_logger.debug("Read docker stat line: %s", line)
+                        if thread_logger.isEnabledFor(logging.DEBUG):
+                            thread_logger.debug("Read docker stat line: %s", line)
                         self.docker_stats.put(line.strip())
                     _rc = process.poll()
         except Exception as ex:
@@ -997,20 +999,23 @@ class Docker2Mqtt:
 
                     container: str = event["Actor"]["Attributes"]["name"]
                     if not self._filter_container(container):
-                        events_logger.debug("Skip container: %s", container)
+                        if events_logger.isEnabledFor(logging.DEBUG):
+                            events_logger.debug("Skip container: %s", container)
                         return
 
-                    events_logger.debug(
-                        "Have an event to process for Container name: %s", container
-                    )
+                    if events_logger.isEnabledFor(logging.DEBUG):
+                        events_logger.debug(
+                            "Have an event to process for Container name: %s", container
+                        )
 
                     if event["status"] == "create":
                         # Cancel any previous pending destroys and add this to known_event_containers.
                         events_logger.info("Container %s has been created.", container)
                         if container in self.pending_destroy_operations:
-                            events_logger.debug(
-                                "Removing pending delete for %s.", container
-                            )
+                            if events_logger.isEnabledFor(logging.DEBUG):
+                                events_logger.debug(
+                                    "Removing pending delete for %s.", container
+                                )
                             del self.pending_destroy_operations[container]
 
                         if self._filter_container(container):
@@ -1087,7 +1092,8 @@ class Docker2Mqtt:
                         f"Error parsing line: {event_line}"
                     ) from ex
 
-                events_logger.debug("Sending mqtt payload")
+                if events_logger.isEnabledFor(logging.DEBUG):
+                    events_logger.debug("Sending mqtt payload")
                 self._mqtt_send(
                     self.events_topic.format(container),
                     json.dumps(self.known_event_containers[container]),
@@ -1104,7 +1110,6 @@ class Docker2Mqtt:
 
         """
         stat_line = ""
-        send_mqtt = False
 
         docker_stats_qsize = self.docker_stats.qsize()
         try:
@@ -1137,12 +1142,10 @@ class Docker2Mqtt:
                         stats_logger.debug("Skip container: %s", container)
                         return
 
-                    stats_logger.debug(
-                        "Have a Stat to process for container: %s", container
-                    )
-
-                    stats_logger.debug("Generating stat key (hashed stat line)")
-                    stat_key = hashlib.md5(json.dumps(stat).encode("utf-8")).hexdigest()
+                    if stats_logger.isEnabledFor(logging.DEBUG):
+                        stats_logger.debug(
+                            "Have a Stat to process for container: %s", container
+                        )
 
                     if container not in self.known_stat_containers:
                         self.known_stat_containers[container] = ContainerStatsRef(
@@ -1151,137 +1154,153 @@ class Docker2Mqtt:
 
                         self.last_stat_containers[container] = {}
 
-                    stats_logger.debug("Current stat key: %s", stat_key)
-                    existing_stat_key = self.known_stat_containers[container]["key"]
-                    stats_logger.debug("Last stat key: %s", existing_stat_key)
-
                     check_date = datetime.datetime.now() - datetime.timedelta(
                         seconds=self.cfg["stats_record_seconds"]
                     )
                     container_date = self.known_stat_containers[container]["last"]
-                    stats_logger.debug(
-                        "Compare dates %s %s", check_date, container_date
-                    )
-
-                    if stat_key != existing_stat_key and container_date <= check_date:
-                        send_mqtt = True
-                        stats_logger.info("Processing %s stats", container)
-                        self.known_stat_containers[container]["key"] = stat_key
-                        self.known_stat_containers[container]["last"] = (
-                            datetime.datetime.now()
+                    if stats_logger.isEnabledFor(logging.DEBUG):
+                        stats_logger.debug(
+                            "Compare dates %s %s", check_date, container_date
                         )
-                        delta_seconds = (
-                            self.known_stat_containers[container]["last"]
-                            - container_date
-                        ).total_seconds()
+                    if container_date > check_date:
+                        if stats_logger.isEnabledFor(logging.DEBUG):
+                            stats_logger.debug(
+                                "Not processing record, too recent: %s ",
+                                container,
+                            )
+                        return
 
-                        # "61.13MiB / 2.86GiB"
-                        # regex = r"(?P<used>\d+?\.?\d+?)(?P<used_symbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limit_symbol>[MG]iB)"
-                        regex = r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+\/\s(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
+                    stat_key = hashlib.md5(stat_line.encode("utf-8")).hexdigest()
+                    existing_stat_key = self.known_stat_containers[container]["key"]
+                    if stats_logger.isEnabledFor(logging.DEBUG):
+                        stats_logger.debug(
+                            "Compare hashes %s %s", stat_key, existing_stat_key
+                        )
+                    if stat_key == existing_stat_key:
+                        if stats_logger.isEnabledFor(logging.DEBUG):
+                            stats_logger.debug(
+                                "Not processing duplicate record: %s ",
+                                container,
+                            )
+                        return
+
+                    if stats_logger.isEnabledFor(logging.DEBUG):
+                        stats_logger.info("Processing %s stats", container)
+                    self.known_stat_containers[container]["key"] = stat_key
+                    self.known_stat_containers[container]["last"] = (
+                        datetime.datetime.now()
+                    )
+                    delta_seconds = (
+                        self.known_stat_containers[container]["last"] - container_date
+                    ).total_seconds()
+
+                    # "61.13MiB / 2.86GiB"
+                    # regex = r"(?P<used>\d+?\.?\d+?)(?P<used_symbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limit_symbol>[MG]iB)"
+                    # regex = r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+\/\s(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
+
+                    if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.debug(
                             'Getting memory from "%s" with "%s"',
                             stat["MemUsage"],
-                            regex,
+                            MEM_RE,
                         )
-                        matches = re.match(regex, stat["MemUsage"], re.MULTILINE)
-                        mem_mb_used, mem_mb_limit = self._stat_to_value(
-                            "MEMORY", container, matches
-                        )
+                    matches = MEM_RE.match(stat["MemUsage"], re.MULTILINE)
+                    mem_mb_used, mem_mb_limit = self._stat_to_value(
+                        "MEMORY", container, matches
+                    )
 
+                    if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.debug(
-                            'Getting NETIO from "%s" with "%s"', stat["NetIO"], regex
+                            'Getting NETIO from "%s" with "%s"', stat["NetIO"], MEM_RE
                         )
-                        matches = re.match(regex, stat["NetIO"], re.MULTILINE)
-                        netinput, netoutput = self._stat_to_value(
-                            "NETIO", container, matches
+                    matches = MEM_RE.match(stat["NetIO"], re.MULTILINE)
+                    netinput, netoutput = self._stat_to_value(
+                        "NETIO", container, matches
+                    )
+                    netinputrate = (
+                        max(
+                            0,
+                            (
+                                netinput
+                                - self.last_stat_containers[container].get(
+                                    "netinput", 0
+                                )
+                            ),
                         )
-                        netinputrate = (
-                            max(
-                                0,
-                                (
-                                    netinput
-                                    - self.last_stat_containers[container].get(
-                                        "netinput", 0
-                                    )
-                                ),
-                            )
-                            / delta_seconds
+                        / delta_seconds
+                    )
+                    netoutputrate = (
+                        max(
+                            0,
+                            (
+                                netoutput
+                                - self.last_stat_containers[container].get(
+                                    "netoutput", 0
+                                )
+                            ),
                         )
-                        netoutputrate = (
-                            max(
-                                0,
-                                (
-                                    netoutput
-                                    - self.last_stat_containers[container].get(
-                                        "netoutput", 0
-                                    )
-                                ),
-                            )
-                            / delta_seconds
-                        )
+                        / delta_seconds
+                    )
 
+                    if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.debug(
                             'Getting BLOCKIO from "%s" with "%s"',
                             stat["BlockIO"],
-                            regex,
+                            MEM_RE,
                         )
-                        matches = re.match(regex, stat["BlockIO"], re.MULTILINE)
-                        blockinput, blockoutput = self._stat_to_value(
-                            "BLOCKIO", container, matches
+                    matches = MEM_RE.match(stat["BlockIO"], re.MULTILINE)
+                    blockinput, blockoutput = self._stat_to_value(
+                        "BLOCKIO", container, matches
+                    )
+                    blockinputrate = (
+                        max(
+                            0,
+                            (
+                                blockinput
+                                - self.last_stat_containers[container].get(
+                                    "blockinput", 0
+                                )
+                            ),
                         )
-                        blockinputrate = (
-                            max(
-                                0,
-                                (
-                                    blockinput
-                                    - self.last_stat_containers[container].get(
-                                        "blockinput", 0
-                                    )
-                                ),
-                            )
-                            / delta_seconds
+                        / delta_seconds
+                    )
+                    blockoutputrate = (
+                        max(
+                            0,
+                            (
+                                blockoutput
+                                - self.last_stat_containers[container].get(
+                                    "blockoutput", 0
+                                )
+                            ),
                         )
-                        blockoutputrate = (
-                            max(
-                                0,
-                                (
-                                    blockoutput
-                                    - self.last_stat_containers[container].get(
-                                        "blockoutput", 0
-                                    )
-                                ),
-                            )
-                            / delta_seconds
-                        )
+                        / delta_seconds
+                    )
 
-                        container_stats = ContainerStats(
-                            {
-                                "name": container,
-                                "host": self.cfg["docker2mqtt_hostname"],
-                                "cpu": float(stat["CPUPerc"].strip("%")),
-                                "memory": stat["MemUsage"],
-                                "memoryused": mem_mb_used,
-                                "memorylimit": mem_mb_limit,
-                                "netio": stat["NetIO"],
-                                "netinput": netinput,
-                                "netinputrate": netinputrate,
-                                "netoutput": netoutput,
-                                "netoutputrate": netoutputrate,
-                                "blockinput": blockinput,
-                                "blockinputrate": blockinputrate,
-                                "blockoutput": blockoutput,
-                                "blockoutputrate": blockoutputrate,
-                            }
-                        )
+                    container_stats = ContainerStats(
+                        {
+                            "name": container,
+                            "host": self.cfg["docker2mqtt_hostname"],
+                            "cpu": float(stat["CPUPerc"].strip("%")),
+                            "memory": stat["MemUsage"],
+                            "memoryused": mem_mb_used,
+                            "memorylimit": mem_mb_limit,
+                            "netio": stat["NetIO"],
+                            "netinput": netinput,
+                            "netinputrate": netinputrate,
+                            "netoutput": netoutput,
+                            "netoutputrate": netoutputrate,
+                            "blockinput": blockinput,
+                            "blockinputrate": blockinputrate,
+                            "blockoutput": blockoutput,
+                            "blockoutputrate": blockoutputrate,
+                        }
+                    )
+                    if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.debug(
                             "Printing container stats: %s", container_stats
                         )
-                        self.last_stat_containers[container] = container_stats
-                    else:
-                        stats_logger.debug(
-                            "Not processing record as duplicate record or too young: %s ",
-                            container,
-                        )
+                    self.last_stat_containers[container] = container_stats
 
                 except Exception as ex:
                     stats_logger.exception("Error parsing line: %s", stat_line)
@@ -1292,13 +1311,13 @@ class Docker2Mqtt:
                         f"Error parsing line: {stat_line}"
                     ) from ex
 
-                if send_mqtt:
+                if stats_logger.isEnabledFor(logging.DEBUG):
                     stats_logger.debug("Sending mqtt payload")
-                    self._mqtt_send(
-                        self.stats_topic.format(container),
-                        json.dumps(self.last_stat_containers[container]),
-                        retain=False,
-                    )
+                self._mqtt_send(
+                    self.stats_topic.format(container),
+                    json.dumps(self.last_stat_containers[container]),
+                    retain=False,
+                )
 
 
 def configure_logger(
