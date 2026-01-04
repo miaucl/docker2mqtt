@@ -64,6 +64,11 @@ from .type_definitions import (
     Docker2MqttConfig,
 )
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
 # Loggers
 main_logger = logging.getLogger("main")
 events_logger = logging.getLogger("events")
@@ -163,6 +168,7 @@ class Docker2Mqtt:
             Prevent exit from within docker2mqtt, when handled outside
 
         """
+        main_logger.info(cfg)
 
         self.cfg = cfg
         self.do_not_exit = do_not_exit
@@ -207,6 +213,7 @@ class Docker2Mqtt:
                 callback_api_version=paho.mqtt.enums.CallbackAPIVersion.VERSION2,
                 client_id=self.cfg["mqtt_client_id"],
             )
+            self.mqtt.enable_logger(main_logger)
             self.mqtt.username_pw_set(
                 username=self.cfg["mqtt_user"], password=self.cfg["mqtt_password"]
             )
@@ -229,6 +236,8 @@ class Docker2Mqtt:
             main_logger.exception("Error while trying to connect to MQTT broker.")
             main_logger.debug(ex)
             raise Docker2MqttConnectionException from ex
+
+        self.first_connection_event.wait()
 
         started = False
         try:
@@ -365,7 +374,7 @@ class Docker2Mqtt:
         self,
         _client: Any,
         _userdata: Any,
-        _flags: Any,
+        # _flags: Any,
         reason_code: Any,
         _props: Any = None,
     ) -> None:
