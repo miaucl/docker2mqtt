@@ -82,7 +82,8 @@ You can use environment variables to control the behavior.
 
 | Config | Env Variable | Default | Description |
 | -------- | -------------- | --------- | ------------- |
-| `log_level` | `LOG_LEVEL` | `INFO` | Set to `DEBUG,INFO,WARN,ERROR,CRITICAL` to enable different levels of verbosity. |
+| `log_level` | `LOG_LEVEL` | `4` | Set to `DEBUG=5,INFO=4,WARN=3,ERROR=2,CRITICAL=1` to enable different levels of verbosity. |
+| `log_dir` | `LOG_DIR` | `` | Set path to for additional logging to file. |
 | `docker2mqtt_hostname` | `DOCKER2MQTT_HOSTNAME` | docker2mqtt Container Hostname | The hostname of your docker host. This will be the container's hostname by default, you probably want to override it. |
 | `homeassistant_prefix` | `HOMEASSISTANT_PREFIX` | `homeassistant` | The prefix for Home Assistant discovery. Must be the same as `discovery_prefix` in your Home Assistant configuration. |
 | `homeassistant_single_device` | `HOMEASSISTANT_SINGLE_DEVICE` | `false` | Group all entities by a single device in Home Assistant instead of one device per entity. |
@@ -120,6 +121,12 @@ A few assumptions:
 After you start the service (binary) sensors should show up in Home Assistant immediately. Look for sensors that start with `(binary_)sensor.docker`. Metadata about the container will be available as attributes for events, which you can then expose using template sensors if you wish.
 
 ![Screenshot of Home Assistant sensor showing status and attributes.](https://raw.githubusercontent.com/miaucl/docker2mqtt/master/media/ha_screenshot.png)
+
+## Logging
+
+`docker2mqtt` can log to a directory in addition to the console using the `--logdir` parameter. The specified directory can be absolute or relative and is created if it doesn't exist. The verbosity parameter applies to file logging and the log file size is limited to 1M bytes and 5 previous files are kept.
+
+`docker2mqtt --name Server1 -vvvvv --logdir /var/log/docker2mqtt/`
 
 ## Documentation
 

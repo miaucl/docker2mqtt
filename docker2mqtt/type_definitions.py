@@ -1,7 +1,7 @@
 """docker2mqtt type definitions."""
 
 from datetime import datetime
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 ContainerEventStateType = Literal["on", "off"]
 """Container event state"""
@@ -19,6 +19,8 @@ class Docker2MqttConfig(TypedDict):
     ----------
     log_level
         Log verbosity
+    log_dir
+        Log directory
     destroyed_container_ttl
         How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires.
     homeassistant_prefix
@@ -56,7 +58,8 @@ class Docker2MqttConfig(TypedDict):
 
     """
 
-    log_level: str
+    log_level: int
+    log_dir: NotRequired[str]
     destroyed_container_ttl: int
     homeassistant_prefix: str
     homeassistant_single_device: bool
@@ -180,12 +183,18 @@ class ContainerDeviceEntry(TypedDict):
         The name of the device to display in home assistant
     model
         The model of the device as additional info
+    hw_version
+        The hardware version of the device (Docker version)
+    sw_version
+        The software version of the device (Container tag)
 
     """
 
     identifiers: str
     name: str
     model: str
+    hw_version: NotRequired[str]
+    sw_version: NotRequired[str]
 
 
 class ContainerEntry(TypedDict):

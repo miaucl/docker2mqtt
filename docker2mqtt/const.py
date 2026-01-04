@@ -6,7 +6,7 @@ import socket
 
 from .type_definitions import Docker2MqttConfig
 
-LOG_LEVEL_DEFAULT = "INFO"
+LOG_LEVEL_DEFAULT = 4
 DESTROYED_CONTAINER_TTL_DEFAULT = 24 * 60 * 60  # s
 HOMEASSISTANT_PREFIX_DEFAULT = "homeassistant"
 HOMEASSISTANT_SINGLE_DEVICE_DEFAULT = False
