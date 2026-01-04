@@ -169,8 +169,6 @@ class Docker2Mqtt:
             Prevent exit from within docker2mqtt, when handled outside
 
         """
-        main_logger.info(cfg)
-
         self.cfg = cfg
         self.do_not_exit = do_not_exit
         self.first_connection_event = Event()
@@ -228,11 +226,9 @@ class Docker2Mqtt:
             self.mqtt.on_connect = self._on_connect
             self.mqtt.on_connect_fail = self._on_connect_fail
             self.mqtt.on_disconnect = self._on_disconnect
-            main_logger.warning("ABOUT TO CALL connect_async()")
             self.mqtt.connect_async(
                 self.cfg["mqtt_host"], self.cfg["mqtt_port"], self.cfg["mqtt_timeout"]
             )
-            main_logger.warning("RETURNED FROM connect_async()")
             self.mqtt.loop_start()
 
         except paho.mqtt.client.WebsocketConnectionError as ex:
@@ -377,7 +373,6 @@ class Docker2Mqtt:
         self,
         _client: Any,
         _userdata: Any,
-        # _flags: Any,
         reason_code: Any,
         _props: Any = None,
     ) -> None:
@@ -389,8 +384,6 @@ class Docker2Mqtt:
             The client id (unused)
         _userdata
             The userdata (unused)
-        _flags
-            The flags (unused)
         reason_code
             The reason code
         _props
@@ -993,8 +986,9 @@ class Docker2Mqtt:
             if event_line and len(event_line) > 0:
                 try:
                     event = json.loads(event_line)
-                    if event["status"] not in WATCHED_EVENTS:
-                        events_logger.info("Not a watched event: %s", event["status"])
+                    action = event.get("status", event.get("Action", "unknown"))
+                    if action not in WATCHED_EVENTS:
+                        events_logger.info("Not a watched event: %s", action)
                         return
 
                     container: str = event["Actor"]["Attributes"]["name"]
@@ -1008,7 +1002,7 @@ class Docker2Mqtt:
                             "Have an event to process for Container name: %s", container
                         )
 
-                    if event["status"] == "create":
+                    if action == "create":
                         # Cancel any previous pending destroys and add this to known_event_containers.
                         events_logger.info("Container %s has been created.", container)
                         if container in self.pending_destroy_operations:
@@ -1028,7 +1022,7 @@ class Docker2Mqtt:
                                 }
                             )
 
-                    elif event["status"] == "destroy":
+                    elif action == "destroy":
                         # Add this container to pending_destroy_operations.
                         events_logger.info(
                             "Container %s has been destroyed.", container
@@ -1037,17 +1031,17 @@ class Docker2Mqtt:
                         self.known_event_containers[container]["status"] = "destroyed"
                         self.known_event_containers[container]["state"] = "off"
 
-                    elif event["status"] == "die":
+                    elif action == "die":
                         events_logger.info("Container %s has stopped.", container)
                         self.known_event_containers[container]["status"] = "stopped"
                         self.known_event_containers[container]["state"] = "off"
 
-                    elif event["status"] == "pause":
+                    elif action == "pause":
                         events_logger.info("Container %s has paused.", container)
                         self.known_event_containers[container]["status"] = "paused"
                         self.known_event_containers[container]["state"] = "off"
 
-                    elif event["status"] == "rename":
+                    elif action == "rename":
                         old_name = event["Actor"]["Attributes"]["oldName"]
                         if old_name.startswith("/"):
                             old_name = old_name[1:]
@@ -1072,17 +1066,17 @@ class Docker2Mqtt:
                             )
                         del self.known_event_containers[old_name]
 
-                    elif event["status"] == "start":
+                    elif action == "start":
                         events_logger.info("Container %s has started.", container)
                         self.known_event_containers[container]["status"] = "running"
                         self.known_event_containers[container]["state"] = "on"
 
-                    elif event["status"] == "unpause":
+                    elif action == "unpause":
                         events_logger.info("Container %s has unpaused.", container)
                         self.known_event_containers[container]["status"] = "running"
                         self.known_event_containers[container]["state"] = "on"
                     else:
-                        events_logger.debug("Unknown event: %s", event["status"])
+                        events_logger.debug("Unknown event: %s", action)
 
                 except Exception as ex:
                     events_logger.exception("Error parsing line: %s", event_line)
