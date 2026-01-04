@@ -38,7 +38,7 @@ if __name__ == "__main__":
     cfg = Docker2MqttConfig(
         {
             "log_level": int(environ.get("LOG_LEVEL", LOG_LEVEL_DEFAULT)),
-            "log_dir": str(environ.get("LOG_DIR", LOG_LEVEL_DEFAULT)),
+            "log_dir": str(environ.get("LOG_DIR", "")),
             "destroyed_container_ttl": int(
                 environ.get("DESTROYED_CONTAINER_TTL", DESTROYED_CONTAINER_TTL_DEFAULT)
             ),
