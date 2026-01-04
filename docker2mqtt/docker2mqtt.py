@@ -20,6 +20,7 @@ import sys
 from threading import Event, Thread
 from time import sleep, time
 from typing import Any
+import uuid
 
 import paho.mqtt.client
 
@@ -211,7 +212,7 @@ class Docker2Mqtt:
             # Setup MQTT
             self.mqtt = paho.mqtt.client.Client(
                 callback_api_version=paho.mqtt.enums.CallbackAPIVersion.VERSION2,
-                client_id=self.cfg["mqtt_client_id"],
+                client_id=f"{self.cfg['mqtt_client_id']}_{uuid.uuid4().hex[:6]}",
             )
             self.mqtt.enable_logger(main_logger)
             self.mqtt.username_pw_set(
