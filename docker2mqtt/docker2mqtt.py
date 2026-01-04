@@ -6,6 +6,9 @@ import datetime
 import hashlib
 import json
 import logging
+from logging.handlers import RotatingFileHandler
+from os import path
+from pathlib import Path
 import platform
 from queue import Empty, Queue
 import re
@@ -14,7 +17,7 @@ import socket
 import subprocess
 from subprocess import PIPE, Popen
 import sys
-from threading import Thread
+from threading import Event, Thread
 from time import sleep, time
 from typing import Any
 
@@ -60,9 +63,6 @@ from .type_definitions import (
     ContainerStatsRef,
     Docker2MqttConfig,
 )
-
-# Configure logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 # Loggers
 main_logger = logging.getLogger("main")
@@ -148,6 +148,8 @@ class Docker2Mqtt:
     stats_topic: str
     events_topic: str
 
+    first_connection_event: Event
+
     do_not_exit: bool
 
     def __init__(self, cfg: Docker2MqttConfig, do_not_exit: bool = False):
@@ -164,6 +166,7 @@ class Docker2Mqtt:
 
         self.cfg = cfg
         self.do_not_exit = do_not_exit
+        self.first_connection_event = Event()
 
         self.discovery_binary_sensor_topic = f"{cfg['homeassistant_prefix']}/binary_sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
         self.discovery_sensor_topic = f"{cfg['homeassistant_prefix']}/sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
@@ -185,10 +188,6 @@ class Docker2Mqtt:
         if self.cfg["enable_stats"]:
             self.b_stats = True
 
-        main_logger.setLevel(self.cfg["log_level"].upper())
-        events_logger.setLevel(self.cfg["log_level"].upper())
-        stats_logger.setLevel(self.cfg["log_level"].upper())
-
         try:
             self.docker_version = self._get_docker_version()
         except FileNotFoundError as e:
@@ -205,7 +204,7 @@ class Docker2Mqtt:
         try:
             # Setup MQTT
             self.mqtt = paho.mqtt.client.Client(
-                callback_api_version=paho.mqtt.client.CallbackAPIVersion.VERSION2,  # type: ignore[attr-defined, call-arg]
+                callback_api_version=paho.mqtt.enums.CallbackAPIVersion.VERSION2,
                 client_id=self.cfg["mqtt_client_id"],
             )
             self.mqtt.username_pw_set(
@@ -217,48 +216,19 @@ class Docker2Mqtt:
                 qos=self.cfg["mqtt_qos"],
                 retain=True,
             )
-            self.mqtt.connect(
+            self.mqtt.reconnect_delay_set(min_delay=1, max_delay=300)
+            self.mqtt.on_connect = self._on_connect
+            self.mqtt.on_connect_fail = self._on_connect_fail
+            self.mqtt.on_disconnect = self._on_disconnect
+            self.mqtt.connect_async(
                 self.cfg["mqtt_host"], self.cfg["mqtt_port"], self.cfg["mqtt_timeout"]
             )
             self.mqtt.loop_start()
-            self._mqtt_send(self.status_topic, "online", retain=True)
-            self._mqtt_send(self.version_topic, self.version, retain=True)
 
         except paho.mqtt.client.WebsocketConnectionError as ex:
             main_logger.exception("Error while trying to connect to MQTT broker.")
             main_logger.debug(ex)
             raise Docker2MqttConnectionException from ex
-
-        # Register containers with HA
-        docker_ps = subprocess.run(
-            DOCKER_PS_CMD, capture_output=True, text=True, check=False
-        )
-        for line in docker_ps.stdout.splitlines():
-            container_status = json.loads(line)
-
-            if self._filter_container(container_status["Names"]):
-                status_str: ContainerEventStatusType
-                state_str: ContainerEventStateType
-
-                if "Paused" in container_status["Status"]:
-                    status_str = "paused"
-                    state_str = "off"
-                elif "Up" in container_status["Status"]:
-                    status_str = "running"
-                    state_str = "on"
-                else:
-                    status_str = "stopped"
-                    state_str = "off"
-
-                if self.b_events:
-                    self._register_container(
-                        {
-                            "name": container_status["Names"],
-                            "image": container_status["Image"],
-                            "status": status_str,
-                            "state": state_str,
-                        }
-                    )
 
         started = False
         try:
@@ -313,6 +283,116 @@ class Docker2Mqtt:
             main_logger.exception("MQTT Cleanup Failed")
             main_logger.debug(ex)
             main_logger.info("Ignoring cleanup error and exiting...")
+
+    def _on_connect(
+        self,
+        _client: Any,
+        _userdata: Any,
+        _flags: Any,
+        reason_code: Any,
+        _props: Any = None,
+    ) -> None:
+        """Handle the connection return.
+
+        Parameters
+        ----------
+        _client
+            The client id (unused)
+        _userdata
+            The userdata (unused)
+        _flags
+            The flags (unused)
+        reason_code
+            The reason code
+        _props
+            The props (unused)
+
+        """
+        if reason_code == 0:
+            main_logger.info("Connected to MQTT broker.")
+            self._mqtt_send(self.status_topic, "online", retain=True)
+            self._mqtt_send(self.version_topic, self.version, retain=True)
+
+            # Register containers with HA
+            docker_ps = subprocess.run(
+                DOCKER_PS_CMD, capture_output=True, text=True, check=False
+            )
+            for line in docker_ps.stdout.splitlines():
+                container_status = json.loads(line)
+
+                if self._filter_container(container_status["Names"]):
+                    status_str: ContainerEventStatusType
+                    state_str: ContainerEventStateType
+
+                    if "Paused" in container_status["Status"]:
+                        status_str = "paused"
+                        state_str = "off"
+                    elif "Up" in container_status["Status"]:
+                        status_str = "running"
+                        state_str = "on"
+                    else:
+                        status_str = "stopped"
+                        state_str = "off"
+
+                    if self.b_events:
+                        self._register_container(
+                            {
+                                "name": container_status["Names"],
+                                "image": container_status["Image"],
+                                "status": status_str,
+                                "state": state_str,
+                            }
+                        )
+
+            self.first_connection_event.set()
+        else:
+            main_logger.error("Connection refused : %s", reason_code.getName())
+
+    def _on_connect_fail(self, _client: Any, _userdata: Any) -> None:
+        """Handle the connection failure.
+
+        Parameters
+        ----------
+        _client
+            The client id (unused)
+        _userdata
+            The userdata (unused)
+
+        """
+        main_logger.error("Connect failed")
+
+    def _on_disconnect(
+        self,
+        _client: Any,
+        _userdata: Any,
+        _flags: Any,
+        reason_code: Any,
+        _props: Any = None,
+    ) -> None:
+        """Handle the disconnection return.
+
+        Parameters
+        ----------
+        _client
+            The client id (unused)
+        _userdata
+            The userdata (unused)
+        _flags
+            The flags (unused)
+        reason_code
+            The reason code
+        _props
+            The props (unused)
+
+        """
+        if reason_code == 0:
+            main_logger.warning("Disconnected from MQTT broker.")
+        else:
+            main_logger.error(
+                "Disconnected : ReasonCode %d, %s",
+                reason_code.value,
+                reason_code.getName(),
+            )
 
     def loop(self) -> None:
         """Start the loop.
@@ -370,6 +450,9 @@ class Docker2Mqtt:
             If anything goes wrong outside of the known exceptions
 
         """
+
+        while not self.first_connection_event.wait(5):
+            main_logger.debug("Waiting for connection.")
 
         while True:
             try:
@@ -500,7 +583,9 @@ class Docker2Mqtt:
     def _run_readline_events_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("event-thread")
-        thread_logger.setLevel(self.cfg["log_level"].upper())
+        configure_logger(
+            thread_logger, self.cfg["log_level"], self.cfg.get("log_dir", None)
+        )
         try:
             thread_logger.info("Starting events thread")
             thread_logger.debug("Command: %s", DOCKER_EVENTS_CMD)
@@ -529,7 +614,9 @@ class Docker2Mqtt:
     def _run_readline_stats_thread(self) -> None:
         """Run docker events and continually read lines from it."""
         thread_logger = logging.getLogger("stats-thread")
-        thread_logger.setLevel(self.cfg["log_level"].upper())
+        configure_logger(
+            thread_logger, self.cfg["log_level"], self.cfg.get("log_dir", None)
+        )
         try:
             thread_logger.info("Starting stats thread")
             thread_logger.debug("Command: %s", DOCKER_STATS_CMD)
@@ -565,16 +652,21 @@ class Docker2Mqtt:
 
         """
         container = container_entry["name"]
+        image = container_entry["image"]
         if not self.cfg["homeassistant_single_device"]:
             return {
                 "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}_{container}",
                 "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()} {container}",
-                "model": f"{platform.system()} {platform.machine()} {self.docker_version}",
+                "hw_version": f"{platform.system()} {platform.machine()} {self.docker_version}",
+                "model": f"{image.split(':')[0]}",
+                "sw_version": f"{image.split(':')[1]}",
             }
         return {
             "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}",
             "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()}",
-            "model": f"{platform.system()} {platform.machine()} {self.docker_version}",
+            "hw_version": f"{platform.system()} {platform.machine()} {self.docker_version}",
+            "model": f"{image.split(':')[0]}",
+            "sw_version": f"{image.split(':')[1]}",
         }
 
     def _register_container(self, container_entry: ContainerEvent) -> None:
@@ -643,7 +735,7 @@ class Docker2Mqtt:
                     "payload_available": "online",
                     "payload_not_available": "offline",
                     "state_topic": stats_topic,
-                    "value_template": f"{{{{ value_json.{ field } if value_json is not undefined and value_json.{ field } is not undefined else None }}}}",
+                    "value_template": f"{{{{ value_json.{field} if value_json is not undefined and value_json.{field} is not undefined else None }}}}",
                     "unit_of_measurement": unit,
                     "icon": icon,
                     "payload_on": None,
@@ -1193,6 +1285,63 @@ class Docker2Mqtt:
                     )
 
 
+def configure_logger(
+    logger: logging.Logger, verbosity: int, logdir: str | None
+) -> None:
+    """Configure logger.
+
+    Parameters
+    ----------
+    logger
+        The logger to configure
+    verbosity
+        The verbosity level
+    logdir
+        The log directory
+
+    """
+    if verbosity >= 5:
+        logger.setLevel(logging.DEBUG)
+    elif verbosity == 4:
+        logger.setLevel(logging.INFO)
+    elif verbosity == 3:
+        logger.setLevel(logging.WARNING)
+    elif verbosity == 2:
+        logger.setLevel(logging.ERROR)
+    elif verbosity == 1:
+        logger.setLevel(logging.CRITICAL)
+
+    # Configure logger
+    logger.propagate = False
+
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    formatter = logging.Formatter(log_format)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    if logdir:
+        try:
+            logdirpath = Path(logdir)
+            absolute_logdir = (
+                logdirpath.resolve() if not logdirpath.is_absolute() else logdirpath
+            )
+            absolute_logdir.mkdir(parents=True, exist_ok=True)
+            log_file = path.join(absolute_logdir, f"docker2mqtt-{logger.name}.log")
+            file_handler = RotatingFileHandler(
+                log_file, maxBytes=1_000_000, backupCount=5
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception as ex:
+            logger.warning(
+                "Failed to initialize logging to directory %s : %s",
+                logdir,
+                str(ex),
+            )
+
+
 def main() -> None:
     """Run main entry for the docker2mqtt executable.
 
@@ -1316,6 +1465,11 @@ def main() -> None:
         type=int,
         default=STATS_RECORD_SECONDS_DEFAULT,
     )
+    parser.add_argument(
+        "--logdir",
+        default=None,
+        help="Enables logging to specified directory (default: None)",
+    )
 
     try:
         args = parser.parse_args()
@@ -1325,12 +1479,15 @@ def main() -> None:
         raise Docker2MqttConfigException(
             "Cannot start due to bad config data type"
         ) from e
-    log_level = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "DEBUG"][
-        args.verbosity
-    ]
+
+    configure_logger(main_logger, args.verbosity, args.logdir)
+    configure_logger(events_logger, args.verbosity, args.logdir)
+    configure_logger(stats_logger, args.verbosity, args.logdir)
+
     cfg = Docker2MqttConfig(
         {
-            "log_level": log_level,
+            "log_level": args.verbosity,
+            "log_dir": args.logdir,
             "destroyed_container_ttl": args.ttl,
             "homeassistant_prefix": args.homeassistant_prefix,
             "homeassistant_single_device": args.homeassistant_single_device,
