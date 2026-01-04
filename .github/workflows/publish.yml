@@ -113,6 +113,9 @@ jobs:
     name: Publish Docker Image to Container Registry
     needs: check_version
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
     timeout-minutes: 15
     steps:
     - name: Check out the repo
