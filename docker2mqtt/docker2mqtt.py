@@ -664,21 +664,25 @@ class Docker2Mqtt:
 
         """
         container = container_entry["name"]
-        image = container_entry["image"]
+        image, tag = (
+            container_entry["image"].split(":", 1)
+            if ":" in container_entry["image"]
+            else (container_entry["image"], "latest")
+        )
         if not self.cfg["homeassistant_single_device"]:
             return {
                 "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}_{container}",
                 "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()} {container}",
                 "hw_version": f"{platform.system()} {platform.machine()} {self.docker_version}",
-                "model": f"{image.split(':')[0]}",
-                "sw_version": f"{image.split(':')[1]}",
+                "model": image,
+                "sw_version": tag,
             }
         return {
             "identifiers": f"{self.cfg['docker2mqtt_hostname']}_{self.cfg['mqtt_topic_prefix']}",
             "name": f"{self.cfg['docker2mqtt_hostname']} {self.cfg['mqtt_topic_prefix'].title()}",
             "hw_version": f"{platform.system()} {platform.machine()} {self.docker_version}",
-            "model": f"{image.split(':')[0]}",
-            "sw_version": f"{image.split(':')[1]}",
+            "model": image,
+            "sw_version": tag,
         }
 
     def _register_container(self, container_entry: ContainerEvent) -> None:
