@@ -119,7 +119,7 @@ jobs:
     timeout-minutes: 15
     steps:
     - name: Check out the repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Docker meta
       id: docker_meta
       uses: docker/metadata-action@v5
