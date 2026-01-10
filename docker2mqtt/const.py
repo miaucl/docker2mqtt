@@ -31,6 +31,8 @@ WATCHED_EVENTS = (
     "start",
     "stop",
     "unpause",
+    "health_status: unhealthy",
+    "health_status: healthy",
 )
 MAX_QUEUE_SIZE = 100
 DOCKER_EVENTS_CMD = [
@@ -43,6 +45,12 @@ DOCKER_EVENTS_CMD = [
 ]
 DOCKER_PS_CMD = ["docker", "ps", "-a", "--format", "{{json .}}"]
 DOCKER_STATS_CMD = ["docker", "stats", "--format", "{{json .}}"]
+DOCKER_INSPECT_HEALTH_CMD = [
+    "docker",
+    "inspect",
+    "--format",
+    "{{if .State.Health}}{{.State.Health.Status}}{{end}}",
+]
 DOCKER_VERSION_CMD = ["docker", "--version"]
 INVALID_HA_TOPIC_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 ANSI_ESCAPE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")

@@ -11,6 +11,9 @@ ContainerEventStatusType = Literal[
 ]
 """Container event docker status"""
 
+ContainerHeathType = Literal["starting", "healthy", "unhealthy"]
+"""Container event docker status"""
+
 
 class Docker2MqttConfig(TypedDict):
     """A config object.
@@ -92,6 +95,8 @@ class ContainerEvent(TypedDict):
         The docker status the container is in
     state
         The state of the container
+    health
+        The health of the container
 
     """
 
@@ -99,6 +104,7 @@ class ContainerEvent(TypedDict):
     image: str
     status: ContainerEventStatusType
     state: ContainerEventStateType
+    health: NotRequired[ContainerHeathType]
 
 
 class ContainerStatsRef(TypedDict):
