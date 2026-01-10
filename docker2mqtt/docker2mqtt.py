@@ -718,7 +718,7 @@ class Docker2Mqtt:
         self.known_event_containers[container] = container_entry
 
         # Events
-        for label, field, device_class in EVENTS_REGISTRATION_ENTRIES:
+        for label, field, device_class, on, off in EVENTS_REGISTRATION_ENTRIES:
             registration_topic = self.discovery_binary_sensor_topic.format(
                 INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_events")
             )
@@ -732,8 +732,8 @@ class Docker2Mqtt:
                     "payload_not_available": "offline",
                     "state_topic": events_topic,
                     "value_template": f"{{{{ value_json.{field} if value_json is not undefined and value_json.{field} is not undefined else None }}}}",
-                    "payload_on": "on",
-                    "payload_off": "off",
+                    "payload_on": on,
+                    "payload_off": off,
                     "icon": None,
                     "unit_of_measurement": None,
                     "device": self._device_definition(container_entry),

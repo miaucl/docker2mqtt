@@ -71,9 +71,9 @@ STATS_REGISTRATION_ENTRIES = [
 # fmt: on
 # fmt: off
 EVENTS_REGISTRATION_ENTRIES = [
-    # label,field,device_class
-    ('State',  'state',  'running'),
-    ('Health', 'health', None),
+    # label,field,device_class,payload_on,payload_off
+    ('State',  'state',  'running', 'on',       'off'),
+    ('Health', 'health', None,      'healthy',  'unhealthy'),
 ]
 # fmt: on
 
