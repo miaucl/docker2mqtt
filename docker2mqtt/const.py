@@ -31,6 +31,8 @@ WATCHED_EVENTS = (
     "start",
     "stop",
     "unpause",
+    "health_status: unhealthy",
+    "health_status: healthy",
 )
 MAX_QUEUE_SIZE = 100
 DOCKER_EVENTS_CMD = [
@@ -43,6 +45,12 @@ DOCKER_EVENTS_CMD = [
 ]
 DOCKER_PS_CMD = ["docker", "ps", "-a", "--format", "{{json .}}"]
 DOCKER_STATS_CMD = ["docker", "stats", "--format", "{{json .}}"]
+DOCKER_INSPECT_HEALTH_CMD = [
+    "docker",
+    "inspect",
+    "--format",
+    "{{if .State.Health}}{{.State.Health.Status}}{{end}}",
+]
 DOCKER_VERSION_CMD = ["docker", "--version"]
 INVALID_HA_TOPIC_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 ANSI_ESCAPE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
@@ -59,6 +67,13 @@ STATS_REGISTRATION_ENTRIES = [
     ('Block Output',            'blockoutput',      'data_size',    'MB',   'mdi:database-arrow-down'),
     ('Block Input Rate',        'blockinputrate',   'data_rate',    'MB/s', 'mdi:database-arrow-up-outline'),
     ('Block Output Rate',       'blockoutputrate',  'data_rate',    'MB/s', 'mdi:database-arrow-down-outline'),
+]
+# fmt: on
+# fmt: off
+EVENTS_REGISTRATION_ENTRIES = [
+    # label,field,device_class
+    ('State',  'state',  'running'),
+    ('Health', 'health', None),
 ]
 # fmt: on
 

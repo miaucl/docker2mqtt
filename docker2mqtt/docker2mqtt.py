@@ -19,7 +19,7 @@ from subprocess import PIPE, Popen
 import sys
 from threading import Event, Thread
 from time import sleep, time
-from typing import Any
+from typing import Any, cast
 import uuid
 
 import paho.mqtt.client
@@ -31,9 +31,11 @@ from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
     DOCKER_EVENTS_CMD,
+    DOCKER_INSPECT_HEALTH_CMD,
     DOCKER_PS_CMD,
     DOCKER_STATS_CMD,
     DOCKER_VERSION_CMD,
+    EVENTS_REGISTRATION_ENTRIES,
     HOMEASSISTANT_PREFIX_DEFAULT,
     HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
     INVALID_HA_TOPIC_CHARS,
@@ -60,6 +62,7 @@ from .type_definitions import (
     ContainerEvent,
     ContainerEventStateType,
     ContainerEventStatusType,
+    ContainerHeathType,
     ContainerStats,
     ContainerStatsRef,
     Docker2MqttConfig,
@@ -251,9 +254,9 @@ class Docker2Mqtt:
 
         try:
             if self.b_stats:
-                started = True
                 logging.info("Starting Stats thread")
                 self._start_readline_stats_thread()
+                started = True
         except Exception as ex:
             main_logger.exception("Error while trying to start stats thread.")
             main_logger.debug(ex)
@@ -343,7 +346,7 @@ class Docker2Mqtt:
                         state_str = "off"
 
                     if self.b_events:
-                        self._register_container(
+                        container = ContainerEvent(
                             {
                                 "name": container_status["Names"],
                                 "image": container_status["Image"],
@@ -351,6 +354,10 @@ class Docker2Mqtt:
                                 "state": state_str,
                             }
                         )
+                        health = self._get_container_health(container_status["Names"])
+                        if health is not None:
+                            container["health"] = health
+                        self._register_container(container)
 
             self.first_connection_event.set()
         else:
@@ -516,6 +523,19 @@ class Docker2Mqtt:
                 raise Docker2MqttException(f"Error: {result.stderr.strip()}")
         except FileNotFoundError:
             return "Docker is not installed or not found in PATH."
+
+    def _get_container_health(self, container: str) -> ContainerHeathType | None:
+        result = subprocess.run(
+            [
+                *DOCKER_INSPECT_HEALTH_CMD,
+                container,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        health = result.stdout.strip()
+        return cast(ContainerHeathType, health) if health else None
 
     def _mqtt_send(self, topic: str, payload: str, retain: bool = False) -> None:
         """Send a mqtt payload to for a topic.
@@ -698,39 +718,40 @@ class Docker2Mqtt:
         self.known_event_containers[container] = container_entry
 
         # Events
-        registration_topic = self.discovery_binary_sensor_topic.format(
-            INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_events")
-        )
-        events_topic = self.events_topic.format(container)
-        registration_packet = ContainerEntry(
-            {
-                "name": "Events",
-                "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
-                "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
-                "payload_available": "online",
-                "payload_not_available": "offline",
-                "state_topic": events_topic,
-                "value_template": '{{ value_json.state if value_json is not undefined and value_json.state is not undefined else "off" }}',
-                "payload_on": "on",
-                "payload_off": "off",
-                "icon": None,
-                "unit_of_measurement": None,
-                "device": self._device_definition(container_entry),
-                "device_class": "running",
-                "json_attributes_topic": events_topic,
-                "qos": self.cfg["mqtt_qos"],
-            }
-        )
-        self._mqtt_send(
-            registration_topic,
-            json.dumps(clean_for_discovery(registration_packet)),
-            retain=True,
-        )
-        self._mqtt_send(
-            events_topic,
-            json.dumps(container_entry),
-            retain=True,
-        )
+        for label, field, device_class in EVENTS_REGISTRATION_ENTRIES:
+            registration_topic = self.discovery_binary_sensor_topic.format(
+                INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_events")
+            )
+            events_topic = self.events_topic.format(container)
+            registration_packet = ContainerEntry(
+                {
+                    "name": label,
+                    "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
+                    "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
+                    "payload_available": "online",
+                    "payload_not_available": "offline",
+                    "state_topic": events_topic,
+                    "value_template": f"{{{{ value_json.{field} if value_json is not undefined and value_json.{field} is not undefined else None }}}}",
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "icon": None,
+                    "unit_of_measurement": None,
+                    "device": self._device_definition(container_entry),
+                    "device_class": device_class,
+                    "json_attributes_topic": events_topic,
+                    "qos": self.cfg["mqtt_qos"],
+                }
+            )
+            self._mqtt_send(
+                registration_topic,
+                json.dumps(clean_for_discovery(registration_packet)),
+                retain=True,
+            )
+            self._mqtt_send(
+                events_topic,
+                json.dumps(container_entry),
+                retain=True,
+            )
 
         # Stats
         for label, field, device_class, unit, icon in STATS_REGISTRATION_ENTRIES:
@@ -1002,82 +1023,7 @@ class Docker2Mqtt:
                             "Have an event to process for Container name: %s", container
                         )
 
-                    if action == "create":
-                        # Cancel any previous pending destroys and add this to known_event_containers.
-                        events_logger.info("Container %s has been created.", container)
-                        if container in self.pending_destroy_operations:
-                            if events_logger.isEnabledFor(logging.DEBUG):
-                                events_logger.debug(
-                                    "Removing pending delete for %s.", container
-                                )
-                            del self.pending_destroy_operations[container]
-
-                        if self._filter_container(container):
-                            self._register_container(
-                                {
-                                    "name": container,
-                                    "image": event["from"],
-                                    "status": "created",
-                                    "state": "off",
-                                }
-                            )
-
-                    elif action == "destroy":
-                        # Add this container to pending_destroy_operations.
-                        events_logger.info(
-                            "Container %s has been destroyed.", container
-                        )
-                        self.pending_destroy_operations[container] = time()
-                        self.known_event_containers[container]["status"] = "destroyed"
-                        self.known_event_containers[container]["state"] = "off"
-
-                    elif action == "die":
-                        events_logger.info("Container %s has stopped.", container)
-                        self.known_event_containers[container]["status"] = "stopped"
-                        self.known_event_containers[container]["state"] = "off"
-
-                    elif action == "pause":
-                        events_logger.info("Container %s has paused.", container)
-                        self.known_event_containers[container]["status"] = "paused"
-                        self.known_event_containers[container]["state"] = "off"
-
-                    elif action == "rename":
-                        old_name = event["Actor"]["Attributes"]["oldName"]
-                        if old_name.startswith("/"):
-                            old_name = old_name[1:]
-                        events_logger.info(
-                            "Container %s renamed to %s.", old_name, container
-                        )
-                        self._unregister_container(old_name)
-                        if self._filter_container(container):
-                            self._register_container(
-                                {
-                                    "name": container,
-                                    "image": self.known_event_containers[old_name][
-                                        "image"
-                                    ],
-                                    "status": self.known_event_containers[old_name][
-                                        "status"
-                                    ],
-                                    "state": self.known_event_containers[old_name][
-                                        "state"
-                                    ],
-                                }
-                            )
-                        del self.known_event_containers[old_name]
-
-                    elif action == "start":
-                        events_logger.info("Container %s has started.", container)
-                        self.known_event_containers[container]["status"] = "running"
-                        self.known_event_containers[container]["state"] = "on"
-
-                    elif action == "unpause":
-                        events_logger.info("Container %s has unpaused.", container)
-                        self.known_event_containers[container]["status"] = "running"
-                        self.known_event_containers[container]["state"] = "on"
-                    else:
-                        events_logger.debug("Unknown event: %s", action)
-
+                    self._process_action(action, container, event)
                 except Exception as ex:
                     events_logger.exception("Error parsing line: %s", event_line)
                     events_logger.exception("Error of parsed line")
@@ -1093,6 +1039,107 @@ class Docker2Mqtt:
                     json.dumps(self.known_event_containers[container]),
                     retain=True,
                 )
+
+    def _process_action(self, action: str, container: str, event: Any) -> None:
+        """Process an action of an event for a container.
+
+        Parameter
+        ---------
+
+        action
+            The action to process
+        container
+            The container of the action
+        event
+            The event object
+
+        """
+
+        if action == "create":
+            # Cancel any previous pending destroys and add this to known_event_containers.
+            events_logger.info("Container %s has been created.", container)
+            if container in self.pending_destroy_operations:
+                if events_logger.isEnabledFor(logging.DEBUG):
+                    events_logger.debug("Removing pending delete for %s.", container)
+                del self.pending_destroy_operations[container]
+
+            if self._filter_container(container):
+                containerEvent = ContainerEvent(
+                    {
+                        "name": container,
+                        "image": event["from"],
+                        "status": "created",
+                        "state": "off",
+                    }
+                )
+                health = self._get_container_health(container)
+                if health is not None:
+                    containerEvent["health"] = health
+                self._register_container(containerEvent)
+
+        elif action == "destroy":
+            # Add this container to pending_destroy_operations.
+            events_logger.info("Container %s has been destroyed.", container)
+            self.pending_destroy_operations[container] = time()
+            self.known_event_containers[container]["status"] = "destroyed"
+            self.known_event_containers[container]["state"] = "off"
+
+        elif action == "die":
+            events_logger.info("Container %s has stopped.", container)
+            self.known_event_containers[container]["status"] = "stopped"
+            self.known_event_containers[container]["state"] = "off"
+
+        elif action == "pause":
+            events_logger.info("Container %s has paused.", container)
+            self.known_event_containers[container]["status"] = "paused"
+            self.known_event_containers[container]["state"] = "off"
+
+        elif action == "rename":
+            old_name = event["Actor"]["Attributes"]["oldName"]
+            if old_name.startswith("/"):
+                old_name = old_name[1:]
+            events_logger.info("Container %s renamed to %s.", old_name, container)
+            self._unregister_container(old_name)
+            if self._filter_container(container):
+                containerEvent = ContainerEvent(
+                    {
+                        "name": container,
+                        "image": self.known_event_containers[old_name]["image"],
+                        "status": self.known_event_containers[old_name]["status"],
+                        "state": self.known_event_containers[old_name]["state"],
+                    }
+                )
+                health = self.known_event_containers[old_name].get("health")
+                if health is not None:
+                    containerEvent["health"] = health
+                self._register_container(containerEvent)
+
+            del self.known_event_containers[old_name]
+
+        elif action == "start":
+            events_logger.info("Container %s has started.", container)
+            self.known_event_containers[container]["status"] = "running"
+            self.known_event_containers[container]["state"] = "on"
+
+        elif action == "unpause":
+            events_logger.info("Container %s has unpaused.", container)
+            self.known_event_containers[container]["status"] = "running"
+            self.known_event_containers[container]["state"] = "on"
+
+        elif action in [
+            "health_status: healthy",
+            "health_status: unhealthy",
+        ]:
+            events_logger.info("Container %s health update.", container)
+            raw_action = event.get("Action", event.get("status", "unknown"))
+            action, _, action_value = raw_action.partition(":")
+            action = action.strip()
+            health = action_value.strip()
+            self.known_event_containers[container]["health"] = health
+            events_logger.info("Container %s health changed to %s", container, health)
+
+        else:
+            events_logger.debug("Unknown event: %s", action)
 
     def _handle_stats_queue(self) -> None:
         """Check if any event is present in the queue and process it.
