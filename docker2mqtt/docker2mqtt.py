@@ -35,6 +35,7 @@ from .const import (
     DOCKER_PS_CMD,
     DOCKER_STATS_CMD,
     DOCKER_VERSION_CMD,
+    EVENTS_REGISTRATION_ENTRIES,
     HOMEASSISTANT_PREFIX_DEFAULT,
     HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
     INVALID_HA_TOPIC_CHARS,
@@ -717,39 +718,40 @@ class Docker2Mqtt:
         self.known_event_containers[container] = container_entry
 
         # Events
-        registration_topic = self.discovery_binary_sensor_topic.format(
-            INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_events")
-        )
-        events_topic = self.events_topic.format(container)
-        registration_packet = ContainerEntry(
-            {
-                "name": "Events",
-                "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
-                "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
-                "payload_available": "online",
-                "payload_not_available": "offline",
-                "state_topic": events_topic,
-                "value_template": '{{ value_json.state if value_json is not undefined and value_json.state is not undefined else "off" }}',
-                "payload_on": "on",
-                "payload_off": "off",
-                "icon": None,
-                "unit_of_measurement": None,
-                "device": self._device_definition(container_entry),
-                "device_class": "running",
-                "json_attributes_topic": events_topic,
-                "qos": self.cfg["mqtt_qos"],
-            }
-        )
-        self._mqtt_send(
-            registration_topic,
-            json.dumps(clean_for_discovery(registration_packet)),
-            retain=True,
-        )
-        self._mqtt_send(
-            events_topic,
-            json.dumps(container_entry),
-            retain=True,
-        )
+        for label, field, device_class in EVENTS_REGISTRATION_ENTRIES:
+            registration_topic = self.discovery_binary_sensor_topic.format(
+                INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_events")
+            )
+            events_topic = self.events_topic.format(container)
+            registration_packet = ContainerEntry(
+                {
+                    "name": label,
+                    "unique_id": f"{self.cfg['mqtt_topic_prefix']}_{self.cfg['docker2mqtt_hostname']}_{registration_topic}",
+                    "availability_topic": f"{self.cfg['mqtt_topic_prefix']}/{self.cfg['docker2mqtt_hostname']}/status",
+                    "payload_available": "online",
+                    "payload_not_available": "offline",
+                    "state_topic": events_topic,
+                    "value_template": f"{{{{ value_json.{field} if value_json is not undefined and value_json.{field} is not undefined else None }}}}",
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "icon": None,
+                    "unit_of_measurement": None,
+                    "device": self._device_definition(container_entry),
+                    "device_class": device_class,
+                    "json_attributes_topic": events_topic,
+                    "qos": self.cfg["mqtt_qos"],
+                }
+            )
+            self._mqtt_send(
+                registration_topic,
+                json.dumps(clean_for_discovery(registration_packet)),
+                retain=True,
+            )
+            self._mqtt_send(
+                events_topic,
+                json.dumps(container_entry),
+                retain=True,
+            )
 
         # Stats
         for label, field, device_class, unit, icon in STATS_REGISTRATION_ENTRIES:

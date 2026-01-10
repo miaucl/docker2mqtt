@@ -69,6 +69,13 @@ STATS_REGISTRATION_ENTRIES = [
     ('Block Output Rate',       'blockoutputrate',  'data_rate',    'MB/s', 'mdi:database-arrow-down-outline'),
 ]
 # fmt: on
+# fmt: off
+EVENTS_REGISTRATION_ENTRIES = [
+    # label,field,device_class
+    ('State',  'state',  'running'),
+    ('Health', 'health', None),
+]
+# fmt: on
 
 DEFAULT_CONFIG = Docker2MqttConfig(
     {
