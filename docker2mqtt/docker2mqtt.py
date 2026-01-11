@@ -382,6 +382,8 @@ class Docker2Mqtt:
         _userdata: Any,
         reason_code: Any,
         _props: Any = None,
+        *_args: Any,
+        **_kwargs: Any,
     ) -> None:
         """Handle the disconnection return.
 
@@ -395,15 +397,28 @@ class Docker2Mqtt:
             The reason code
         _props
             The props (unused)
+        _args
+            Any additional args
+        _kwargs
+            Any additional kwargs
 
         """
-        if reason_code == 0:
-            main_logger.warning("Disconnected from MQTT broker.")
+        # Case 1: clean disconnect or MQTT v5 reason code
+        if hasattr(reason_code, "getName"):
+            if reason_code == 0:
+                main_logger.warning("Disconnected from MQTT broker.")
+            else:
+                main_logger.error(
+                    "Disconnected: ReasonCode %s (%s)",
+                    getattr(reason_code, "value", "n/a"),
+                    reason_code.getName(),
+                )
+
+        # Case 2: connection refused / network failure
         else:
             main_logger.error(
-                "Disconnected : ReasonCode %d, %s",
-                reason_code.value,
-                reason_code.getName(),
+                "Disconnected before CONNACK (likely auth or network issue): %s",
+                reason_code,
             )
 
     def loop(self) -> None:
