@@ -1067,7 +1067,7 @@ class Docker2Mqtt:
                 containerEvent = ContainerEvent(
                     {
                         "name": container,
-                        "image": event["from"],
+                        "image": event.get("image", event.get("from", "unknown")),
                         "status": "created",
                         "state": "off",
                     }
@@ -1099,22 +1099,27 @@ class Docker2Mqtt:
             if old_name.startswith("/"):
                 old_name = old_name[1:]
             events_logger.info("Container %s renamed to %s.", old_name, container)
-            self._unregister_container(old_name)
-            if self._filter_container(container):
-                containerEvent = ContainerEvent(
-                    {
-                        "name": container,
-                        "image": self.known_event_containers[old_name]["image"],
-                        "status": self.known_event_containers[old_name]["status"],
-                        "state": self.known_event_containers[old_name]["state"],
-                    }
+            if old_name not in self.known_event_containers:
+                events_logger.info(
+                    "Renamed container %s is unknown, skipping...", old_name
                 )
-                health = self.known_event_containers[old_name].get("health")
-                if health is not None:
-                    containerEvent["health"] = health
-                self._register_container(containerEvent)
+            else:
+                self._unregister_container(old_name)
+                if self._filter_container(container):
+                    containerEvent = ContainerEvent(
+                        {
+                            "name": container,
+                            "image": self.known_event_containers[old_name]["image"],
+                            "status": self.known_event_containers[old_name]["status"],
+                            "state": self.known_event_containers[old_name]["state"],
+                        }
+                    )
+                    health = self.known_event_containers[old_name].get("health")
+                    if health is not None:
+                        containerEvent["health"] = health
+                    self._register_container(containerEvent)
 
-            del self.known_event_containers[old_name]
+                del self.known_event_containers[old_name]
 
         elif action == "start":
             events_logger.info("Container %s has started.", container)
