@@ -1208,6 +1208,12 @@ class Docker2Mqtt:
                             "Have a Stat to process for container: %s", container
                         )
 
+                    if stat["MemUsage"] == "-- / --":
+                        stats_logger.debug(
+                            "Skip container with no stats: %s", container
+                        )
+                        return
+
                     if container not in self.known_stat_containers:
                         self.known_stat_containers[container] = ContainerStatsRef(
                             {"key": "", "last": datetime.datetime(2020, 1, 1)}
