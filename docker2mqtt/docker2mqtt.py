@@ -30,6 +30,7 @@ from . import __version__
 from .const import (
     ANSI_ESCAPE,
     DESTROYED_CONTAINER_TTL_DEFAULT,
+    DISCOVERY_DEFAULT,
     DOCKER_EVENTS_CMD,
     DOCKER_INSPECT_HEALTH_CMD,
     DOCKER_PS_CMD,
@@ -150,12 +151,13 @@ class Docker2Mqtt:
 
     docker_version: str
 
-    discovery_binary_sensor_topic: str
-    discovery_sensor_topic: str
     status_topic: str
     version_topic: str
     stats_topic: str
     events_topic: str
+
+    homeassistant_discovery_binary_sensor_topic: str
+    homeassistant_discovery_sensor_topic: str
 
     first_connection_event: Event
 
@@ -176,8 +178,8 @@ class Docker2Mqtt:
         self.do_not_exit = do_not_exit
         self.first_connection_event = Event()
 
-        self.discovery_binary_sensor_topic = f"{cfg['homeassistant_prefix']}/binary_sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
-        self.discovery_sensor_topic = f"{cfg['homeassistant_prefix']}/sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
+        self.homeassistant_discovery_binary_sensor_topic = f"{cfg['homeassistant_prefix']}/binary_sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
+        self.homeassistant_discovery_sensor_topic = f"{cfg['homeassistant_prefix']}/sensor/{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}_{{}}/config"
         self.status_topic = (
             f"{cfg['mqtt_topic_prefix']}/{cfg['docker2mqtt_hostname']}/status"
         )
@@ -420,6 +422,18 @@ class Docker2Mqtt:
                 "Disconnected before CONNACK (likely auth or network issue): %s",
                 reason_code,
             )
+
+    def register_discovery(self) -> None:
+        """Register all known containers for discovery platforms.
+
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
+
+        """
+        for container_entry in self.known_event_containers.values():
+            self._register_container(container_entry)
 
     def loop(self) -> None:
         """Start the loop.
@@ -716,6 +730,26 @@ class Docker2Mqtt:
         }
 
     def _register_container(self, container_entry: ContainerEvent) -> None:
+        """Create discovery topics of container for all entities for discovery platforms.
+
+        Parameters
+        ----------
+        container_entry : ContainerEvent
+            The container event with the data to register a container
+
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
+
+        """
+        discovery_platforms = self.cfg.get("discovery", [])
+        if "homeassistant" in discovery_platforms:
+            self._register_container_to_homeassistant(container_entry)
+
+    def _register_container_to_homeassistant(
+        self, container_entry: ContainerEvent
+    ) -> None:
         """Create discovery topics of container for all entities for home assistant.
 
         Parameters
@@ -734,8 +768,10 @@ class Docker2Mqtt:
 
         # Events
         for label, field, device_class, on, off in EVENTS_REGISTRATION_ENTRIES:
-            registration_topic = self.discovery_binary_sensor_topic.format(
-                INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_events")
+            registration_topic = (
+                self.homeassistant_discovery_binary_sensor_topic.format(
+                    INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_events")
+                )
             )
             events_topic = self.events_topic.format(container)
             registration_packet = ContainerEntry(
@@ -770,7 +806,7 @@ class Docker2Mqtt:
 
         # Stats
         for label, field, device_class, unit, icon in STATS_REGISTRATION_ENTRIES:
-            registration_topic = self.discovery_sensor_topic.format(
+            registration_topic = self.homeassistant_discovery_sensor_topic.format(
                 INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_stats")
             )
             stats_topic = self.stats_topic.format(container)
@@ -805,6 +841,24 @@ class Docker2Mqtt:
             )
 
     def _unregister_container(self, container: str) -> None:
+        """Remove all discovery topics of container from all discovery platforms.
+
+        Parameters
+        ----------
+        container
+            The container name unregister a container
+
+        Raises
+        ------
+        Docker2MqttConnectionError
+            If the mqtt client could not send the data
+
+        """
+        discovery_platforms = self.cfg.get("discovery", [])
+        if "homeassistant" in discovery_platforms:
+            self._unregister_container_to_homeassistant(container)
+
+    def _unregister_container_to_homeassistant(self, container: str) -> None:
         """Remove all discovery topics of container from home assistant.
 
         Parameters
@@ -820,7 +874,7 @@ class Docker2Mqtt:
         """
         # Events
         self._mqtt_send(
-            self.discovery_binary_sensor_topic.format(
+            self.homeassistant_discovery_binary_sensor_topic.format(
                 INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_events")
             ),
             "",
@@ -835,7 +889,7 @@ class Docker2Mqtt:
         # Stats
         for _, field, _, _, _ in STATS_REGISTRATION_ENTRIES:
             self._mqtt_send(
-                self.discovery_sensor_topic.format(
+                self.homeassistant_discovery_sensor_topic.format(
                     INVALID_HA_TOPIC_CHARS.sub("_", f"{container}_{field}_stats")
                 ),
                 "",
@@ -1510,6 +1564,16 @@ def main() -> None:
         help=f"How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires. (default: {DESTROYED_CONTAINER_TTL_DEFAULT}s)",
     )
     parser.add_argument(
+        "--discovery",
+        default=None,
+        help=f"Discovery platforms enabled (default: {DISCOVERY_DEFAULT})",
+        type=str,
+        action="append",
+        nargs="?",
+        const="",
+        metavar="PLATFORM",
+    )
+    parser.add_argument(
         "--homeassistant-prefix",
         default=HOMEASSISTANT_PREFIX_DEFAULT,
         help=f"MQTT discovery topic prefix (default: {HOMEASSISTANT_PREFIX_DEFAULT})",
@@ -1591,6 +1655,7 @@ def main() -> None:
             "log_level": args.verbosity,
             "log_dir": args.logdir,
             "destroyed_container_ttl": args.ttl,
+            "discovery": args.discovery or DISCOVERY_DEFAULT,
             "homeassistant_prefix": args.homeassistant_prefix,
             "homeassistant_single_device": args.homeassistant_single_device,
             "docker2mqtt_hostname": args.name,

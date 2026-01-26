@@ -26,6 +26,8 @@ class Docker2MqttConfig(TypedDict):
         Log directory
     destroyed_container_ttl
         How long, in seconds, before destroyed containers are removed from Home Assistant. Containers won't be removed if the service is restarted before the TTL expires.
+    discovery
+        Enable MQTT discovery for Home Assistant and other platforms
     homeassistant_prefix
         MQTT discovery topic prefix
     homeassistant_single_device
@@ -64,6 +66,7 @@ class Docker2MqttConfig(TypedDict):
     log_level: int
     log_dir: NotRequired[str]
     destroyed_container_ttl: int
+    discovery: list[str]
     homeassistant_prefix: str
     homeassistant_single_device: bool
     docker2mqtt_hostname: str
