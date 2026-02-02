@@ -8,6 +8,7 @@ from .type_definitions import Docker2MqttConfig
 
 LOG_LEVEL_DEFAULT = 4
 DESTROYED_CONTAINER_TTL_DEFAULT = 24 * 60 * 60  # s
+DISCOVERY_DEFAULT = ["homeassistant"]
 HOMEASSISTANT_PREFIX_DEFAULT = "homeassistant"
 HOMEASSISTANT_SINGLE_DEVICE_DEFAULT = False
 MQTT_CLIENT_ID_DEFAULT = "docker2mqtt"
@@ -81,6 +82,7 @@ DEFAULT_CONFIG = Docker2MqttConfig(
     {
         "log_level": LOG_LEVEL_DEFAULT,
         "destroyed_container_ttl": DESTROYED_CONTAINER_TTL_DEFAULT,
+        "discovery": DISCOVERY_DEFAULT,
         "homeassistant_prefix": HOMEASSISTANT_PREFIX_DEFAULT,
         "homeassistant_single_device": HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
         "docker2mqtt_hostname": socket.gethostname(),

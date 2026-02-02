@@ -7,6 +7,7 @@ from socket import gethostname
 
 from .const import (
     DESTROYED_CONTAINER_TTL_DEFAULT,
+    DISCOVERY_DEFAULT,
     EVENTS_DEFAULT,
     HOMEASSISTANT_PREFIX_DEFAULT,
     HOMEASSISTANT_SINGLE_DEVICE_DEFAULT,
@@ -42,6 +43,7 @@ if __name__ == "__main__":
             "destroyed_container_ttl": int(
                 environ.get("DESTROYED_CONTAINER_TTL", DESTROYED_CONTAINER_TTL_DEFAULT)
             ),
+            "discovery": environ.get("DISCOVERY", DISCOVERY_DEFAULT[0]).split(","),
             "homeassistant_prefix": environ.get(
                 "HOMEASSISTANT_PREFIX", HOMEASSISTANT_PREFIX_DEFAULT
             ),
