@@ -70,8 +70,7 @@ from .type_definitions import (
 )
 
 MEM_RE = re.compile(
-    r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+/\s+"
-    r"(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
+    r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+\/\s+(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
 )
 
 # Loggers
@@ -1317,7 +1316,7 @@ class Docker2Mqtt:
 
                     # "61.13MiB / 2.86GiB"
                     # regex = r"(?P<used>\d+?\.?\d+?)(?P<used_symbol>[MG]iB)\s+\/\s(?P<limit>\d+?\.?\d+?)(?P<limit_symbol>[MG]iB)"
-                    # regex = r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+\/\s(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
+                    # regex = r"(?P<used>.+?)(?P<used_symbol>[kKMGT]?i?B)\s+\/\s+(?P<limit>.+?)(?P<limit_symbol>[kKMGT]?i?B)"
 
                     if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.debug(
@@ -1325,7 +1324,7 @@ class Docker2Mqtt:
                             stat["MemUsage"],
                             MEM_RE,
                         )
-                    matches = MEM_RE.match(stat["MemUsage"], re.MULTILINE)
+                    matches = MEM_RE.match(stat["MemUsage"])
                     mem_mb_used, mem_mb_limit = self._stat_to_value(
                         "MEMORY", container, matches
                     )
@@ -1334,7 +1333,7 @@ class Docker2Mqtt:
                         stats_logger.debug(
                             'Getting NETIO from "%s" with "%s"', stat["NetIO"], MEM_RE
                         )
-                    matches = MEM_RE.match(stat["NetIO"], re.MULTILINE)
+                    matches = MEM_RE.match(stat["NetIO"])
                     netinput, netoutput = self._stat_to_value(
                         "NETIO", container, matches
                     )
@@ -1369,7 +1368,7 @@ class Docker2Mqtt:
                             stat["BlockIO"],
                             MEM_RE,
                         )
-                    matches = MEM_RE.match(stat["BlockIO"], re.MULTILINE)
+                    matches = MEM_RE.match(stat["BlockIO"])
                     blockinput, blockoutput = self._stat_to_value(
                         "BLOCKIO", container, matches
                     )
