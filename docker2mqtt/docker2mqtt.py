@@ -743,6 +743,9 @@ class Docker2Mqtt:
             If the mqtt client could not send the data
 
         """
+        container = container_entry["name"]
+        self.known_event_containers[container] = container_entry
+
         discovery_platforms = self.cfg.get("discovery", [])
         if "homeassistant" in discovery_platforms:
             self._register_container_to_homeassistant(container_entry)
@@ -764,7 +767,6 @@ class Docker2Mqtt:
 
         """
         container = container_entry["name"]
-        self.known_event_containers[container] = container_entry
 
         # Events
         for label, field, device_class, on, off in EVENTS_REGISTRATION_ENTRIES:
