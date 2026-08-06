@@ -1,7 +1,7 @@
 paho-mqtt
 mypy
 pydantic
-pre-commit>=4.6.0
+pre-commit>=4.6.1
 python-dotenv>=1.2.2
 ruff~=0.16
 mkdocs-material==9.7.6
