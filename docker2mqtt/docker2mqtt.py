@@ -2,7 +2,7 @@
 """Listens to docker events and stats for containers and sends it to mqtt and supports discovery for home assistant."""
 
 import argparse
-import datetime
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -1272,12 +1272,12 @@ class Docker2Mqtt:
 
                     if container not in self.known_stat_containers:
                         self.known_stat_containers[container] = ContainerStatsRef(
-                            {"key": "", "last": datetime.datetime(2020, 1, 1)}
+                            {"key": "", "last": dt.datetime(2020, 1, 1)}
                         )
 
                         self.last_stat_containers[container] = {}
 
-                    check_date = datetime.datetime.now() - datetime.timedelta(
+                    check_date = dt.datetime.now() - dt.timedelta(
                         seconds=self.cfg["stats_record_seconds"]
                     )
                     container_date = self.known_stat_containers[container]["last"]
@@ -1310,9 +1310,7 @@ class Docker2Mqtt:
                     if stats_logger.isEnabledFor(logging.DEBUG):
                         stats_logger.info("Processing %s stats", container)
                     self.known_stat_containers[container]["key"] = stat_key
-                    self.known_stat_containers[container]["last"] = (
-                        datetime.datetime.now()
-                    )
+                    self.known_stat_containers[container]["last"] = dt.datetime.now()
                     delta_seconds = (
                         self.known_stat_containers[container]["last"] - container_date
                     ).total_seconds()
